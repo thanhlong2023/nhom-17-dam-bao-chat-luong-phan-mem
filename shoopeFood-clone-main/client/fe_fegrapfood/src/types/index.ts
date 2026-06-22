@@ -251,6 +251,51 @@ export type DriverCompletedOrdersPage = {
   limit: number
 }
 
+export type DriverPerformanceMetrics = {
+  driverId: number
+  windows: {
+    acceptance: number
+    cancellation: number
+  }
+  acceptanceRate: {
+    value: number
+    accepted: number
+    total: number
+    threshold: number
+    projectedAfterReject: number
+  }
+  cancellationRate: {
+    value: number
+    cancelled: number
+    accepted: number
+    threshold: number
+    severeThreshold: number
+    projectedAfterCancel: number
+  }
+  rating: {
+    value: number
+    count: number
+    threshold: number
+    minimumThreshold: number
+  }
+  consecutiveRejections: number
+  rewardEligible: boolean
+  penalty: {
+    id: number
+    type: string
+    reason: string
+    startsAt: string
+    endsAt: string | null
+  } | null
+  consequences: {
+    rejectCooldownAt: number
+    rejectCooldownMinutes: number
+    crSuspensionAt: number
+    crSuspensionHours: number
+    ratingRetrainingBelow: number
+  }
+}
+
 export type DriverPublicProfile = {
   driver: Driver
   completedCount: number

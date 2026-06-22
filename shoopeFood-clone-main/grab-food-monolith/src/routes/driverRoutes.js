@@ -6,6 +6,7 @@ const requireRole = require("../middleware/role");
 const router = express.Router();
 
 router.get("/me/orders", auth, requireRole(["DRIVER"]), driverController.getMyOrderFeed);
+router.get("/me/metrics", auth, requireRole(["DRIVER"]), driverController.getMyPerformanceMetrics);
 router.get("/me/route", auth, requireRole(["DRIVER"]), driverController.getDrivingRoute);
 router.get("/me/completed", auth, requireRole(["DRIVER"]), driverController.getMyCompletedOrders);
 router.get("/", auth, requireRole(["ADMIN", "DRIVER"]), driverController.getDrivers);

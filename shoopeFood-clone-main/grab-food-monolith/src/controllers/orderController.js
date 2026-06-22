@@ -21,6 +21,7 @@ const orderFactory = require("../factories/orderFactory");
 const socketManager = require("../sockets");
 const dispatchService = require("../services/dispatchService");
 const driverService = require("../services/driverService");
+const driverPerformanceService = require("../services/driverPerformanceService");
 const locationStreamService = require("../services/locationStreamService");
 const orderWorkflowService = require("../services/orderWorkflowService");
 const { getBaseFeeFromOrder, normalizeOrder, normalizeRestaurantSummary } = require("../utils/orderNormalizer");
@@ -245,31 +246,41 @@ const emitOrderUpdated = (eventName, orderData) => {
   }
 };
 
-const emitDispatchOffers = async (orderData) => {
-  let dispatch;
+const emitDispatchOffers = async (orderData, dispatchResult = null) => {
+  let dispatch = dispatchResult;
 
-  try {
-    dispatch = await dispatchService.findDriverCandidatesForOrder(orderData);
-  } catch (error) {
-    console.log("Dispatch candidate search failed:", error.message);
-    return {
-      algorithm: dispatchService.DISPATCH_ALGORITHM,
-      searchRadiusKm: null,
-      candidates: [],
-      reason: "DISPATCH_SEARCH_FAILED",
-    };
+  if (!dispatch) {
+    try {
+      dispatch = await dispatchService.findDriverCandidatesForOrder(orderData);
+    } catch (error) {
+      console.log("Dispatch candidate search failed:", error.message);
+      return {
+        algorithm: dispatchService.DISPATCH_ALGORITHM,
+        searchRadiusKm: null,
+        candidates: [],
+        reason: "DISPATCH_SEARCH_FAILED",
+      };
+    }
   }
 
   try {
+    const candidates = Array.isArray(dispatch.candidates) ? dispatch.candidates : [];
+    if (candidates.length > 0 && !dispatch.assigned) {
+      await driverPerformanceService.recordDispatchOffers({
+        orderId: orderData.id,
+        dispatch,
+      });
+    }
+
     const io = socketManager.getIO();
     io.to(`order:${orderData.id}`).emit(`order:${orderData.id}:dispatch`, {
       orderId: orderData.id,
       algorithm: dispatch.algorithm,
       searchRadiusKm: dispatch.searchRadiusKm,
-      candidateCount: dispatch.candidates.length,
+      candidateCount: candidates.length,
     });
 
-    dispatch.candidates.forEach((candidate) => {
+    candidates.forEach((candidate) => {
       io.to(`driver:${candidate.driverId || candidate.id}`).emit("driver:order-offered", {
         order: orderData,
         dispatch: {
@@ -727,6 +738,18 @@ exports.acceptOrder = async (req, res) => {
       return res.status(409).json({ message: "Driver must be online before accepting orders" });
     }
 
+    const activePenalty = await driverPerformanceService.getActivePenalty(driverId);
+    if (activePenalty) {
+      return res.status(423).json({
+        message: "Driver is temporarily blocked from receiving orders",
+        data: {
+          type: activePenalty.type,
+          reason: activePenalty.reason,
+          endsAt: activePenalty.endsAt,
+        },
+      });
+    }
+
     let orderId = null;
 
     await sequelize.transaction(async (transaction) => {
@@ -753,6 +776,7 @@ exports.acceptOrder = async (req, res) => {
       }
 
       if (order.driverId && Number(order.driverId) === driverId) {
+        await driverPerformanceService.markOfferAccepted(order.id, driverId, { transaction });
         orderId = order.id;
         return;
       }
@@ -831,6 +855,8 @@ exports.acceptOrder = async (req, res) => {
         { transaction }
       );
 
+      await driverPerformanceService.markOfferAccepted(order.id, driverId, { transaction });
+
       orderId = order.id;
     });
 
@@ -839,6 +865,192 @@ exports.acceptOrder = async (req, res) => {
     emitOrderUpdated("order:claimed", orderData);
 
     return res.json({ message: "Accepted", data: orderData });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message });
+  }
+};
+
+exports.rejectDriverOffer = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const driverId = Number(req.user?.id);
+    const reason = String(req.body.reason || "DRIVER_REJECTED").trim();
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+
+    if (!Number.isFinite(driverId) || req.user.role !== "DRIVER") {
+      return res.status(403).json({ message: "Only DRIVER accounts can reject offers" });
+    }
+
+    const order = await Order.findByPk(id);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (order.driverId) {
+      return res.status(409).json({ message: "Order is already assigned" });
+    }
+
+    const currentStatus = await OrderStatus.findByPk(order.statusId);
+    if (currentStatus?.code !== "CONFIRMED") {
+      return res.status(409).json({ message: "Only confirmed unassigned orders can be rejected" });
+    }
+
+    const result = await driverPerformanceService.rejectOffer(id, driverId, reason);
+    const metrics = await driverPerformanceService.calculateDriverMetrics(driverId);
+
+    try {
+      socketManager.getIO().to(`driver:${driverId}`).emit("driver:performance-updated", metrics);
+    } catch (error) {
+      console.log("Socket not ready or err", error.message);
+    }
+
+    return res.json({
+      message: "Offer rejected",
+      data: normalizeOrder(await orderRepository.findById(id)),
+      meta: {
+        offerId: result.offer ? Number(result.offer.id) : null,
+        cooldown: result.cooldown?.penalty
+          ? {
+              type: result.cooldown.penalty.type,
+              reason: result.cooldown.penalty.reason,
+              endsAt: result.cooldown.penalty.endsAt,
+            }
+          : null,
+        metrics,
+      },
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message });
+  }
+};
+
+exports.cancelDriverOrder = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const driverId = Number(req.user?.id);
+    const reasonCode = String(req.body.reasonCode || req.body.reason || "").trim();
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid order id" });
+    }
+
+    if (!Number.isFinite(driverId) || req.user.role !== "DRIVER") {
+      return res.status(403).json({ message: "Only DRIVER accounts can cancel assigned orders" });
+    }
+
+    if (!reasonCode) {
+      return res.status(400).json({ message: "Cancel reason is required" });
+    }
+
+    let orderId = null;
+    await sequelize.transaction(async (transaction) => {
+      const [confirmedStatus, order] = await Promise.all([
+        resolveStatusByCode("CONFIRMED", { transaction }),
+        Order.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE }),
+      ]);
+
+      if (!confirmedStatus) {
+        throw createHttpError(500, "CONFIRMED order status is not configured");
+      }
+
+      if (!order) {
+        throw createHttpError(404, "Order not found");
+      }
+
+      if (Number(order.driverId) !== driverId) {
+        throw createHttpError(403, "Order is not assigned to this driver");
+      }
+
+      const currentStatus = await OrderStatus.findByPk(order.statusId, { transaction });
+      if (!currentStatus || !DRIVER_ACTIVE_STATUS_CODES.has(currentStatus.code)) {
+        throw createHttpError(409, "Only active driver orders can be cancelled by driver");
+      }
+
+      await driverPerformanceService.markDriverCancelled(order.id, driverId, reasonCode, { transaction });
+
+      await order.update(
+        {
+          driverId: null,
+          statusId: confirmedStatus.id,
+          cancelReason: reasonCode,
+          cancelledByRole: "DRIVER",
+          cancelledByUserId: driverId,
+          cancelledAt: new Date(),
+          statusChangedAt: new Date(),
+          version: Number(order.version || 0) + 1,
+        },
+        { transaction }
+      );
+
+      orderId = order.id;
+    });
+
+    const reassignmentBase = normalizeOrder(await orderRepository.findById(orderId));
+    const consequence = await driverPerformanceService.applyCancellationConsequencesIfNeeded(driverId);
+    let dispatch = null;
+    let orderData = reassignmentBase;
+
+    try {
+      dispatch = await dispatchService.autoAssignDriverToOrder(reassignmentBase);
+    } catch (error) {
+      console.log("Auto redispatch failed:", error.message);
+      dispatch = {
+        assigned: false,
+        algorithm: dispatchService.DISPATCH_ALGORITHM,
+        searchRadiusKm: null,
+        candidates: [],
+        reason: "AUTO_REDISPATCH_FAILED",
+      };
+    }
+
+    if (dispatch.assigned) {
+      orderData = normalizeOrder(await orderRepository.findById(orderId));
+      emitOrderUpdated("order:claimed", orderData);
+    } else {
+      emitOrderUpdated("order:updated", orderData);
+      await emitDispatchOffers(orderData, dispatch);
+    }
+
+    try {
+      if (orderData.customerId) {
+        socketManager.getIO().to(`customer:${orderData.customerId}`).emit(`customer:${orderData.customerId}:driver-reassigned`, {
+          orderId: orderData.id,
+          orderCode: orderData.orderCode,
+          reason: reasonCode,
+          assigned: Boolean(dispatch.assigned),
+          driver: orderData.driver || null,
+        });
+      }
+      socketManager.getIO().to(`driver:${driverId}`).emit("driver:performance-updated", consequence.metrics);
+    } catch (error) {
+      console.log("Socket not ready or err", error.message);
+    }
+
+    return res.json({
+      message: dispatch.assigned ? "Order cancelled and reassigned" : "Order cancelled and queued for redispatch",
+      data: orderData,
+      meta: {
+        metrics: consequence.metrics,
+        penalty: consequence.penalty
+          ? {
+              type: consequence.penalty.type,
+              reason: consequence.penalty.reason,
+              endsAt: consequence.penalty.endsAt,
+            }
+          : null,
+        dispatch: {
+          algorithm: dispatch.algorithm,
+          searchRadiusKm: dispatch.searchRadiusKm,
+          candidateCount: Array.isArray(dispatch.candidates) ? dispatch.candidates.length : 0,
+          assigned: Boolean(dispatch.assigned),
+          assignedDriverId: dispatch.driverId || null,
+          reason: dispatch.reason || null,
+        },
+      },
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message });
   }
@@ -1031,17 +1243,41 @@ exports.updateOrderStatus = async (req, res) => {
         },
         { transaction }
       );
+      if (resolvedStatus.code === "COMPLETED" && item.driverId) {
+        await driverPerformanceService.markOrderCompleted(item.id, item.driverId, { transaction });
+      }
       didChangeStatus = true;
     });
 
     const latest = await orderRepository.findById(orderId);
-    const orderData = normalizeOrder(latest);
-    if (didChangeStatus) {
+    let orderData = normalizeOrder(latest);
+    let dispatch = null;
+
+    if (didChangeStatus && resolvedStatus.code === "CONFIRMED") {
+      try {
+        dispatch = await dispatchService.autoAssignDriverToOrder(orderData);
+      } catch (error) {
+        console.log("Auto dispatch failed:", error.message);
+        dispatch = {
+          assigned: false,
+          algorithm: dispatchService.DISPATCH_ALGORITHM,
+          searchRadiusKm: null,
+          candidates: [],
+          reason: "AUTO_ASSIGN_FAILED",
+        };
+      }
+
+      if (dispatch.assigned) {
+        const assignedOrder = await orderRepository.findById(orderId);
+        orderData = normalizeOrder(assignedOrder);
+        emitOrderUpdated("order:claimed", orderData);
+      } else {
+        emitOrderUpdated("order:updated", orderData);
+        await emitDispatchOffers(orderData, dispatch);
+      }
+    } else if (didChangeStatus) {
       emitOrderUpdated("order:updated", orderData);
     }
-    const dispatch = didChangeStatus && resolvedStatus.code === "CONFIRMED"
-      ? await emitDispatchOffers(orderData)
-      : null;
 
     if (resolvedStatus.code === "DELIVERING" && orderData.customerId) {
       try {
@@ -1080,7 +1316,10 @@ exports.updateOrderStatus = async (req, res) => {
             dispatch: {
               algorithm: dispatch.algorithm,
               searchRadiusKm: dispatch.searchRadiusKm,
-              candidateCount: dispatch.candidates.length,
+              candidateCount: Array.isArray(dispatch.candidates) ? dispatch.candidates.length : 0,
+              assigned: Boolean(dispatch.assigned),
+              assignedDriverId: dispatch.driverId || null,
+              reason: dispatch.reason || null,
             },
           }
         : undefined,

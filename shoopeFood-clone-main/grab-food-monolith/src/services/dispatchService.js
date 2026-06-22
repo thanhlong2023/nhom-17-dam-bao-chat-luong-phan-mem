@@ -1,6 +1,7 @@
 const { Op } = require("sequelize");
-const { DriverDetail, DriverLocation, Order, OrderStatus, Restaurant, User } = require("../models");
+const { DriverDetail, DriverLocation, Order, OrderStatus, Restaurant, User, sequelize } = require("../models");
 const driverService = require("./driverService");
+const driverPerformanceService = require("./driverPerformanceService");
 const { DRIVER_ACTIVE_STATUS_CODES } = require("./orderWorkflowService");
 const { coverRadiusWithGeohashes, getGeohashPrecisionForRadius, isValidCoordinate } = require("../utils/geohash");
 
@@ -167,7 +168,8 @@ const findDriverCandidatesForOrder = async (order, options = {}) => {
       }
     }
 
-    const candidateDriverIds = Array.from(latestByDriverId.keys());
+    const blockedDriverIds = await driverPerformanceService.getBlockedDriverIdsForOrder(order?.id);
+    const candidateDriverIds = Array.from(latestByDriverId.keys()).filter((driverId) => !blockedDriverIds.has(Number(driverId)));
     if (candidateDriverIds.length === 0) continue;
 
     // 2. Chỉ load DriverDetail của những tài xế nằm trong khu vực
@@ -184,8 +186,13 @@ const findDriverCandidatesForOrder = async (order, options = {}) => {
     if (onlineDriverIds.length === 0) continue;
 
     // 3. Lọc bỏ các tài xế đang bận đơn
-    const activeDriverIds = await getActiveDriverIds(onlineDriverIds);
-    const availableDrivers = onlineDrivers.filter((driver) => !activeDriverIds.has(Number(driver.userId)));
+    const [activeDriverIds, penalizedDriverIds] = await Promise.all([
+      getActiveDriverIds(onlineDriverIds),
+      driverPerformanceService.getActivePenaltyDriverIds(onlineDriverIds),
+    ]);
+    const availableDrivers = onlineDrivers.filter(
+      (driver) => !activeDriverIds.has(Number(driver.userId)) && !penalizedDriverIds.has(Number(driver.userId))
+    );
 
     if (availableDrivers.length === 0) continue;
 
@@ -212,10 +219,147 @@ const findDriverCandidatesForOrder = async (order, options = {}) => {
   };
 };
 
+const buildEmptyAssignment = (dispatch, reason) => ({
+  assigned: false,
+  reason,
+  algorithm: dispatch.algorithm,
+  searchRadiusKm: dispatch.searchRadiusKm,
+  candidates: dispatch.candidates,
+});
+
+const autoAssignDriverToOrder = async (order, options = {}) => {
+  const orderId = Number(order?.id);
+  const dispatch = await findDriverCandidatesForOrder(order, { ...options, limit: options.limit || DEFAULT_DRIVER_LIMIT });
+
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    return buildEmptyAssignment(dispatch, "INVALID_ORDER");
+  }
+
+  if (!dispatch.candidates.length) {
+    return buildEmptyAssignment(dispatch, dispatch.reason || "NO_AVAILABLE_DRIVER_IN_RADIUS");
+  }
+
+  let assignment = buildEmptyAssignment(dispatch, "NO_ASSIGNABLE_DRIVER");
+
+  await sequelize.transaction(async (transaction) => {
+    const [confirmedStatus, acceptedStatus, activeStatuses] = await Promise.all([
+      OrderStatus.findOne({ where: { code: "CONFIRMED" }, transaction }),
+      OrderStatus.findOne({ where: { code: "DRIVER_ACCEPTED" }, transaction }),
+      OrderStatus.findAll({
+        where: { code: { [Op.in]: DRIVER_ACTIVE_STATUS_CODES } },
+        attributes: ["id"],
+        transaction,
+      }),
+    ]);
+
+    if (!confirmedStatus || !acceptedStatus) {
+      assignment = buildEmptyAssignment(dispatch, "ORDER_STATUSES_NOT_CONFIGURED");
+      return;
+    }
+
+    const lockedOrder = await Order.findByPk(orderId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!lockedOrder) {
+      assignment = buildEmptyAssignment(dispatch, "ORDER_NOT_FOUND");
+      return;
+    }
+
+    if (lockedOrder.driverId) {
+      assignment = {
+        ...buildEmptyAssignment(dispatch, "ORDER_ALREADY_ASSIGNED"),
+        driverId: Number(lockedOrder.driverId),
+      };
+      return;
+    }
+
+    if (Number(lockedOrder.statusId) !== Number(confirmedStatus.id)) {
+      assignment = buildEmptyAssignment(dispatch, "ORDER_NOT_CONFIRMED");
+      return;
+    }
+
+    const activeStatusIds = activeStatuses.map((status) => status.id).filter(Boolean);
+
+    for (const candidate of dispatch.candidates) {
+      const driverId = Number(candidate.driverId || candidate.id);
+      if (!Number.isInteger(driverId) || driverId <= 0) {
+        continue;
+      }
+
+      const driver = await DriverDetail.findOne({
+        where: {
+          userId: driverId,
+          approvalStatus: "APPROVED",
+          isOnline: true,
+        },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!driver) {
+        continue;
+      }
+
+      if (activeStatusIds.length > 0) {
+        const activeOrder = await Order.findOne({
+          where: {
+            driverId,
+            statusId: { [Op.in]: activeStatusIds },
+            id: { [Op.ne]: orderId },
+          },
+          attributes: ["id"],
+          transaction,
+          lock: transaction.LOCK.UPDATE,
+        });
+
+        if (activeOrder) {
+          continue;
+        }
+      }
+
+      await lockedOrder.update(
+        {
+          driverId,
+          statusId: acceptedStatus.id,
+          statusChangedAt: new Date(),
+          version: Number(lockedOrder.version || 0) + 1,
+        },
+        { transaction }
+      );
+
+      await driverPerformanceService.recordDispatchOffers(
+        {
+          orderId,
+          dispatch,
+          acceptedDriverId: driverId,
+        },
+        { transaction }
+      );
+
+      assignment = {
+        assigned: true,
+        reason: "AUTO_ASSIGNED",
+        algorithm: dispatch.algorithm,
+        searchRadiusKm: dispatch.searchRadiusKm,
+        candidates: dispatch.candidates,
+        driverId,
+        candidate,
+        orderId,
+      };
+      return;
+    }
+  });
+
+  return assignment;
+};
+
 module.exports = {
   CITY_SPEED_KMH,
   DEFAULT_DRIVER_LIMIT,
   DISPATCH_ALGORITHM,
   DISPATCH_SEARCH_RADII_KM,
+  autoAssignDriverToOrder,
   findDriverCandidatesForOrder,
 };

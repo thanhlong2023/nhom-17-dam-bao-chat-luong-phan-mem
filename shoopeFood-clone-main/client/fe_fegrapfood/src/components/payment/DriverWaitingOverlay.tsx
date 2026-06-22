@@ -112,7 +112,7 @@ export default function DriverWaitingOverlay({ order }: DriverWaitingOverlayProp
       <div className="driver-wait-dialog">
         <div className="driver-wait-spinner" aria-hidden="true" />
         <p className="payment-kicker">Đơn hàng đã được xác nhận</p>
-        <h2 id="driver-wait-title">Đang chờ tài xế nhận đơn</h2>
+        <h2 id="driver-wait-title">Đang tự động tìm tài xế gần nhất</h2>
         <p>
           {toOrderCode(order.id, order.orderCode)} · {formatCurrency(order.totalAmount)}
         </p>

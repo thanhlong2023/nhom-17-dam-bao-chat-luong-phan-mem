@@ -1857,6 +1857,60 @@ img {
   font-size: 0.95rem;
 }
 
+.driver-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.driver-metric-card {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(18, 35, 24, 0.05);
+}
+
+.driver-metric-card span {
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.driver-metric-card strong {
+  color: var(--text);
+  font-size: 1.35rem;
+}
+
+.driver-metric-card small {
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.driver-metric-card.good {
+  border-color: rgba(0, 177, 79, 0.28);
+}
+
+.driver-metric-card.warning {
+  border-color: rgba(255, 138, 0, 0.34);
+}
+
+.driver-metric-card.danger {
+  border-color: rgba(211, 47, 47, 0.34);
+}
+
+.driver-metric-card.bonus {
+  border-color: rgba(0, 177, 79, 0.38);
+  background: #f0fff6;
+}
+
+.driver-metric-card.muted {
+  background: #f8faf9;
+}
+
 .driver-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
@@ -2664,6 +2718,12 @@ img {
   font-weight: 800;
 }
 
+.driver-offer-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
 .driver-control-head {
   display: grid;
   gap: 5px;
@@ -2686,6 +2746,41 @@ img {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.driver-warning-list {
+  display: grid;
+  gap: 12px;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.driver-warning-list p {
+  margin: 0;
+}
+
+.driver-warning-danger {
+  color: #b42318;
+  font-weight: 900;
+}
+
+.driver-cancel-reason {
+  display: grid;
+  gap: 6px;
+}
+
+.driver-cancel-reason span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.driver-cancel-reason select {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  background: #fff;
 }
 
 .driver-route-list {

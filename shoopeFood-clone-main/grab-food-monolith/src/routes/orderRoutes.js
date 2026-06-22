@@ -13,6 +13,8 @@ router.get("/route", auth, orderController.getRoute);
 router.get("/:id/tracking", optionalAuth, orderController.getOrderTracking);
 router.get("/:id", orderController.getOrderById);
 router.post("/:id/accept", auth, requireRole(["DRIVER"]), orderController.acceptOrder);
+router.post("/:id/reject-offer", auth, requireRole(["DRIVER"]), orderController.rejectDriverOffer);
+router.post("/:id/driver-cancel", auth, requireRole(["DRIVER"]), orderController.cancelDriverOrder);
 router.post("/:id/cancel", auth, requireRole(["CUSTOMER"]), orderController.cancelOrder);
 router.post("/", auth, requireRole(["CUSTOMER"]), orderController.createOrder);
 router.patch("/:id/reject", auth, requireRole(["MERCHANT"]), orderController.rejectOrder);

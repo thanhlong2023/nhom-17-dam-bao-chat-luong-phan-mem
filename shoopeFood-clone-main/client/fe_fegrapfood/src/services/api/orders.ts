@@ -33,6 +33,16 @@ export async function acceptOrder(id: number) {
   return response.data
 }
 
+export async function rejectDriverOffer(id: number, reason?: string) {
+  const response = await httpPost<ApiResponse<Order>>(`/api/orders/${id}/reject-offer`, { reason })
+  return response.data
+}
+
+export async function cancelDriverOrder(id: number, reasonCode: string) {
+  const response = await httpPost<ApiResponse<Order>>(`/api/orders/${id}/driver-cancel`, { reasonCode })
+  return response.data
+}
+
 export async function updateOrder(id: number, payload: UpdateOrderPayload) {
   const response = await httpPut<ApiResponse<Order>>(`/api/orders/${id}`, payload)
   return response.data

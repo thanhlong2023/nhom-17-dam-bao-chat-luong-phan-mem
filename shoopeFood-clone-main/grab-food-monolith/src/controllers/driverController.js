@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { DriverDetail, DriverLocation, Order, OrderStatus, Review, User, sequelize } = require("../models");
+const { DriverDetail, DriverLocation, DriverOffer, Order, OrderStatus, Review, User, sequelize } = require("../models");
 const socketManager = require("../sockets");
 const orderRepository = require("../repositories/orderRepository");
 const { normalizeOrder } = require("../utils/orderNormalizer");
@@ -7,6 +7,7 @@ const { setUserRole } = require("../utils/roleAssignment");
 const osrmService = require("../services/osrmService");
 const driverService = require("../services/driverService");
 const locationStreamService = require("../services/locationStreamService");
+const driverPerformanceService = require("../services/driverPerformanceService");
 
 const DRIVER_AVAILABLE_STATUS_CODE = "CONFIRMED";
 const COMPLETED_STATUS_CODE = "COMPLETED";
@@ -199,11 +200,24 @@ exports.getMyOrderFeed = async (req, res) => {
         order: [["created_at", "DESC"]],
       }),
     ]);
+    const blockedOffers = availableOrders.length
+      ? await DriverOffer.findAll({
+          where: {
+            driverId,
+            orderId: { [Op.in]: availableOrders.map((order) => order.id) },
+            status: { [Op.in]: ["REJECTED", "DRIVER_CANCELLED"] },
+          },
+          attributes: ["orderId"],
+        })
+      : [];
+    const blockedOrderIds = new Set(blockedOffers.map((offer) => Number(offer.orderId)));
+    const filteredAvailableOrders = availableOrders.filter((order) => !blockedOrderIds.has(Number(order.id)));
     const nearbyAvailableOrders = driverService.hasValidPoint(latestLocation)
-      ? driverService.filterOrdersNearPoint(availableOrders, latestLocation, {
+      ? driverService.filterOrdersNearPoint(filteredAvailableOrders, latestLocation, {
           radiusKm: driverService.DEFAULT_SEARCH_RADIUS_KM,
         })
-      : availableOrders;
+      : filteredAvailableOrders;
+    const metrics = await driverPerformanceService.calculateDriverMetrics(driverId);
 
     return res.json({
       data: {
@@ -211,8 +225,28 @@ exports.getMyOrderFeed = async (req, res) => {
         available: nearbyAvailableOrders.map(normalizeOrder),
         active: myOrders.map(normalizeOrder),
         completed: completedOrders.map(normalizeOrder),
+        metrics,
       },
     });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getMyPerformanceMetrics = async (req, res) => {
+  try {
+    const driverId = Number(req.user?.id);
+    if (!Number.isFinite(driverId) || req.user.role !== "DRIVER") {
+      return res.status(403).json({ message: "Only DRIVER accounts can view performance metrics" });
+    }
+
+    const driver = await findApprovedDriver(driverId);
+    if (!driver) {
+      return res.status(403).json({ message: "Driver account is not approved" });
+    }
+
+    const metrics = await driverPerformanceService.calculateDriverMetrics(driverId);
+    return res.json({ data: metrics });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

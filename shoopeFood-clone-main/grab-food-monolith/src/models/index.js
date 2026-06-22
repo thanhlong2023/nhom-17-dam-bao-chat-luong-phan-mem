@@ -4,6 +4,8 @@ const Role = require("./Role");
 const UserRole = require("./UserRole");
 const DriverDetail = require("./DriverDetail");
 const DriverLocation = require("./DriverLocation");
+const DriverOffer = require("./DriverOffer");
+const DriverPenalty = require("./DriverPenalty");
 const Restaurant = require("./Restaurant");
 const RestaurantChangeRequest = require("./RestaurantChangeRequest");
 const Order = require("./Order");
@@ -28,6 +30,12 @@ DriverDetail.belongsTo(User, { foreignKey: "userId", targetKey: "id", as: "drive
 User.hasMany(DriverLocation, { foreignKey: "driverId", sourceKey: "id", as: "driverLocations" });
 DriverLocation.belongsTo(User, { foreignKey: "driverId", targetKey: "id", as: "driverUser" });
 
+User.hasMany(DriverOffer, { foreignKey: "driverId", sourceKey: "id", as: "driverOffers" });
+DriverOffer.belongsTo(User, { foreignKey: "driverId", targetKey: "id", as: "driverUser" });
+
+User.hasMany(DriverPenalty, { foreignKey: "driverId", sourceKey: "id", as: "driverPenalties" });
+DriverPenalty.belongsTo(User, { foreignKey: "driverId", targetKey: "id", as: "driverUser" });
+
 User.hasMany(Order, { foreignKey: "customerId", sourceKey: "id" });
 Order.belongsTo(User, { foreignKey: "customerId", targetKey: "id", as: "customerUser" });
 
@@ -42,6 +50,9 @@ Order.belongsTo(Restaurant, { foreignKey: "restaurantId", targetKey: "id" });
 
 Order.hasMany(DriverLocation, { foreignKey: "orderId", sourceKey: "id", as: "driverLocations" });
 DriverLocation.belongsTo(Order, { foreignKey: "orderId", targetKey: "id", as: "order" });
+
+Order.hasMany(DriverOffer, { foreignKey: "orderId", sourceKey: "id", as: "driverOffers" });
+DriverOffer.belongsTo(Order, { foreignKey: "orderId", targetKey: "id", as: "order" });
 
 OrderStatus.hasMany(Order, { foreignKey: "statusId", sourceKey: "id" });
 Order.belongsTo(OrderStatus, { foreignKey: "statusId", targetKey: "id", as: "statusInfo" });
@@ -94,6 +105,8 @@ module.exports = {
   UserRole,
   DriverDetail,
   DriverLocation,
+  DriverOffer,
+  DriverPenalty,
   Restaurant,
   RestaurantChangeRequest,
   Order,

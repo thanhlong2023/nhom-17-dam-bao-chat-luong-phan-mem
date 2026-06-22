@@ -6,9 +6,10 @@ import { APP_NAME } from '../constants/app'
 import { useAuth } from '../contexts/AuthContext'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { getMyDriverOrderFeed, getMyCompletedOrders, updateDriverLocation } from '../services/api/drivers'
-import { acceptOrder, getOrderTracking, updateOrderStatus } from '../services/api/orders'
+import { acceptOrder, cancelDriverOrder, getOrderTracking, rejectDriverOffer, updateOrderStatus } from '../services/api/orders'
 import { createSocket } from '../services/socket'
-import type { Driver, DriverCompletedDelivery, Order, OrderTracking, RouteLeg, RoutePoint } from '../types'
+import Modal from '../components/common/Modal'
+import type { Driver, DriverCompletedDelivery, DriverPerformanceMetrics, Order, OrderTracking, RouteLeg, RoutePoint } from '../types'
 
 const SESSION_KEY_POINT = 'driver_last_point'
 const SESSION_KEY_HEADING = 'driver_last_heading'
@@ -46,6 +47,13 @@ function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
 const defaultCenter: [number, number] = [10.7769, 106.7009]
 const NEARBY_RADIUS_KM = 10
 const activeLocationStatuses = new Set(['DRIVER_ACCEPTED', 'PICKING_UP', 'DELIVERING'])
+
+const driverCancelReasons = [
+  { code: 'MERCHANT_DELAY', label: 'Quán làm lâu' },
+  { code: 'VEHICLE_ISSUE', label: 'Thủng lốp / xe hỏng' },
+  { code: 'FLOODED_ROAD', label: 'Đường ngập / cấm đường' },
+  { code: 'PERSONAL_REASON', label: 'Lý do cá nhân' },
+]
 
 function haversineKm(from: RoutePoint, to: { latitude?: number; longitude?: number }) {
   const lat2 = Number(to.latitude)
@@ -220,6 +228,7 @@ export default function DriverPage() {
   const driverId = user?.id ?? null
 
   const [driver, setDriver] = useState<Driver | null>(null)
+  const [performanceMetrics, setPerformanceMetrics] = useState<DriverPerformanceMetrics | null>(null)
   const [availableOrders, setAvailableOrders] = useState<Order[]>([])
   const [myOrders, setMyOrders] = useState<Order[]>([])
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null)
@@ -239,6 +248,9 @@ export default function DriverPage() {
   const [completedPage, setCompletedPage] = useState(1)
   const [isLoadingCompleted, setIsLoadingCompleted] = useState(false)
   const [selectedReview, setSelectedReview] = useState<DriverCompletedDelivery | null>(null)
+  const [pendingRejectOrder, setPendingRejectOrder] = useState<Order | null>(null)
+  const [pendingCancelOrder, setPendingCancelOrder] = useState<Order | null>(null)
+  const [cancelReasonCode, setCancelReasonCode] = useState(driverCancelReasons[0].code)
   const lastGpsPointRef = useRef<RoutePoint | null>(null)
   const simulationReachedRef = useRef<Record<string, boolean>>({})
   const simStateRef = useRef<{ stateKey: string; index: number; point: RoutePoint | null }>({ stateKey: '', index: 0, point: null })
@@ -321,6 +333,7 @@ export default function DriverPage() {
       setErrorMessage(null)
       const feed = await getMyDriverOrderFeed()
       setDriver(feed.driver)
+      setPerformanceMetrics(feed.metrics ?? null)
       setAvailableOrders(feed.available)
       setMyOrders(feed.active)
 
@@ -473,6 +486,9 @@ export default function DriverPage() {
         void loadTracking(activeOrderId, true)
       }
     }
+    const handlePerformanceUpdated = (metrics: DriverPerformanceMetrics) => {
+      setPerformanceMetrics(metrics)
+    }
 
     void createSocket()
       .then((createdSocket) => {
@@ -490,6 +506,7 @@ export default function DriverPage() {
         socket.on('order:claimed', reloadFeed)
         socket.on('driver:order-offered', reloadFeed)
         socket.on('driver:order-updated', reloadFeed)
+        socket.on('driver:performance-updated', handlePerformanceUpdated)
       })
       .catch(() => {
         // Manual reload and polling still work when Socket.io is unavailable.
@@ -506,6 +523,7 @@ export default function DriverPage() {
         socket.off('order:claimed', reloadFeed)
         socket.off('driver:order-offered', reloadFeed)
         socket.off('driver:order-updated', reloadFeed)
+        socket.off('driver:performance-updated', handlePerformanceUpdated)
         socket.disconnect()
       }
     }
@@ -528,6 +546,43 @@ export default function DriverPage() {
       await loadTracking(updated.id)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Không thể nhận đơn')
+    } finally {
+      setIsActioning(false)
+    }
+  }
+
+  async function handleConfirmRejectOrder() {
+    if (!pendingRejectOrder) return
+
+    try {
+      setIsActioning(true)
+      setErrorMessage(null)
+      setSuccessMessage(null)
+      await rejectDriverOffer(pendingRejectOrder.id, 'DRIVER_REJECTED')
+      setSuccessMessage(`Đã từ chối đơn ${pendingRejectOrder.orderCode}`)
+      setPendingRejectOrder(null)
+      await loadFeed()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Không thể từ chối đơn')
+    } finally {
+      setIsActioning(false)
+    }
+  }
+
+  async function handleConfirmCancelOrder() {
+    if (!pendingCancelOrder) return
+
+    try {
+      setIsActioning(true)
+      setErrorMessage(null)
+      setSuccessMessage(null)
+      await cancelDriverOrder(pendingCancelOrder.id, cancelReasonCode)
+      setSuccessMessage(`Đã hủy đơn ${pendingCancelOrder.orderCode}. Hệ thống đang điều phối lại.`)
+      setPendingCancelOrder(null)
+      setActiveOrderId(null)
+      await loadFeed()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Không thể hủy đơn')
     } finally {
       setIsActioning(false)
     }
@@ -563,14 +618,24 @@ export default function DriverPage() {
           <small>{order.receiverAddress || `Đơn #${order.id}`} - {formatPrice(order.cashToCollect || order.totalAmount)} VND</small>
         </button>
         {mode === 'available' ? (
-          <button
-            type="button"
-            className="button-primary"
-            disabled={isActioning || hasActiveDelivery}
-            onClick={() => void handleAcceptOrder(order)}
-          >
-            {hasActiveDelivery ? 'Đang giao đơn khác' : 'Nhận đơn'}
-          </button>
+          <div className="driver-offer-actions">
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={isActioning}
+              onClick={() => setPendingRejectOrder(order)}
+            >
+              Từ chối
+            </button>
+            <button
+              type="button"
+              className="button-primary"
+              disabled={isActioning || hasActiveDelivery}
+              onClick={() => void handleAcceptOrder(order)}
+            >
+              {hasActiveDelivery ? 'Đang giao đơn khác' : 'Nhận đơn'}
+            </button>
+          </div>
         ) : null}
       </article>
     )
@@ -596,6 +661,35 @@ export default function DriverPage() {
           </button>
         </div>
       </div>
+
+      {performanceMetrics ? (
+        <div className="driver-performance-grid">
+          <div className={performanceMetrics.acceptanceRate.value >= performanceMetrics.acceptanceRate.threshold ? 'driver-metric-card good' : 'driver-metric-card warning'}>
+            <span>AR</span>
+            <strong>{performanceMetrics.acceptanceRate.value}%</strong>
+            <small>{performanceMetrics.acceptanceRate.accepted}/{performanceMetrics.acceptanceRate.total} đơn nhận trong {performanceMetrics.windows.acceptance} offer gần nhất</small>
+          </div>
+          <div className={performanceMetrics.cancellationRate.value <= performanceMetrics.cancellationRate.threshold ? 'driver-metric-card good' : 'driver-metric-card danger'}>
+            <span>CR</span>
+            <strong>{performanceMetrics.cancellationRate.value}%</strong>
+            <small>{performanceMetrics.cancellationRate.cancelled}/{performanceMetrics.cancellationRate.accepted} đơn đã nhận bị hủy bởi tài xế</small>
+          </div>
+          <div className={performanceMetrics.rating.value >= performanceMetrics.rating.minimumThreshold ? 'driver-metric-card good' : 'driver-metric-card danger'}>
+            <span>Rating</span>
+            <strong>{performanceMetrics.rating.value.toFixed(2)} ★</strong>
+            <small>{performanceMetrics.rating.count} lượt đánh giá, ngưỡng an toàn {performanceMetrics.rating.minimumThreshold}★</small>
+          </div>
+          <div className={performanceMetrics.rewardEligible ? 'driver-metric-card bonus' : 'driver-metric-card muted'}>
+            <span>Thưởng</span>
+            <strong>{performanceMetrics.rewardEligible ? 'Đủ điều kiện' : 'Chưa đạt'}</strong>
+            <small>
+              {performanceMetrics.penalty
+                ? `Đang bị khóa nhận đơn đến ${performanceMetrics.penalty.endsAt ? new Date(performanceMetrics.penalty.endsAt).toLocaleTimeString('vi-VN') : 'khi được mở'}`
+                : `Cần AR >= ${performanceMetrics.acceptanceRate.threshold}% và CR <= ${performanceMetrics.cancellationRate.threshold}%`}
+            </small>
+          </div>
+        </div>
+      ) : null}
 
       {errorMessage ? <p className="app-feedback error">{errorMessage}</p> : null}
       {successMessage ? <p className="restaurant-feedback success">{successMessage}</p> : null}
@@ -745,7 +839,7 @@ export default function DriverPage() {
                 <button type="button" className="button-secondary" onClick={() => void handleStatus('COMPLETED')} disabled={!canCompleteDelivery || isActioning}>
                   {activeOrder?.statusCode === 'DELIVERING' && !isAtCustomer ? 'Hoàn thành (Đợi tới khách)' : 'Hoàn thành'}
                 </button>
-                <button type="button" className="button-danger" onClick={() => void handleStatus('CANCELLED')} disabled={!isSelectedMine || isActioning}>
+                <button type="button" className="button-danger" onClick={() => activeOrder && setPendingCancelOrder(activeOrder)} disabled={!isSelectedMine || isActioning}>
                   Hủy đơn
                 </button>
               </div>
@@ -919,6 +1013,79 @@ export default function DriverPage() {
           )}
         </div>
       )}
+
+      <Modal
+        title="Cảnh báo trước khi từ chối"
+        subtitle={pendingRejectOrder ? `Đơn ${pendingRejectOrder.orderCode}` : undefined}
+        isOpen={Boolean(pendingRejectOrder)}
+        onClose={() => setPendingRejectOrder(null)}
+        footer={
+          <>
+            <button type="button" className="button-secondary" onClick={() => setPendingRejectOrder(null)} disabled={isActioning}>
+              Quay lại
+            </button>
+            <button type="button" className="button-danger" onClick={() => void handleConfirmRejectOrder()} disabled={isActioning}>
+              {isActioning ? 'Đang xử lý...' : 'Vẫn từ chối'}
+            </button>
+          </>
+        }
+      >
+        <div className="driver-warning-list">
+          <p>
+            Nếu từ chối đơn này, AR của bạn dự kiến giảm từ{' '}
+            <strong>{performanceMetrics?.acceptanceRate.value ?? 100}%</strong> xuống{' '}
+            <strong>{performanceMetrics?.acceptanceRate.projectedAfterReject ?? 100}%</strong>.
+          </p>
+          <p>
+            Chuỗi từ chối/bỏ qua sẽ là{' '}
+            <strong>{(performanceMetrics?.consecutiveRejections ?? 0) + 1}</strong>/{performanceMetrics?.consequences.rejectCooldownAt ?? 3}.
+            Đạt ngưỡng sẽ tạm khóa nhận đơn {performanceMetrics?.consequences.rejectCooldownMinutes ?? 15} phút.
+          </p>
+          {performanceMetrics?.rewardEligible && performanceMetrics.acceptanceRate.projectedAfterReject < performanceMetrics.acceptanceRate.threshold ? (
+            <p className="driver-warning-danger">Bạn có thể mất mốc thưởng ngày nếu AR xuống dưới {performanceMetrics.acceptanceRate.threshold}%.</p>
+          ) : null}
+        </div>
+      </Modal>
+
+      <Modal
+        title="Cảnh báo trước khi hủy đơn"
+        subtitle={pendingCancelOrder ? `Đơn ${pendingCancelOrder.orderCode}` : undefined}
+        isOpen={Boolean(pendingCancelOrder)}
+        onClose={() => setPendingCancelOrder(null)}
+        footer={
+          <>
+            <button type="button" className="button-secondary" onClick={() => setPendingCancelOrder(null)} disabled={isActioning}>
+              Quay lại
+            </button>
+            <button type="button" className="button-danger" onClick={() => void handleConfirmCancelOrder()} disabled={isActioning}>
+              {isActioning ? 'Đang hủy...' : 'Xác nhận hủy'}
+            </button>
+          </>
+        }
+      >
+        <div className="driver-warning-list">
+          <label className="driver-cancel-reason">
+            <span>Lý do hủy</span>
+            <select value={cancelReasonCode} onChange={(event) => setCancelReasonCode(event.target.value)}>
+              {driverCancelReasons.map((reason) => (
+                <option key={reason.code} value={reason.code}>{reason.label}</option>
+              ))}
+            </select>
+          </label>
+          <p>
+            Nếu hủy đơn này, CR của bạn dự kiến tăng từ{' '}
+            <strong>{performanceMetrics?.cancellationRate.value ?? 0}%</strong> lên{' '}
+            <strong>{performanceMetrics?.cancellationRate.projectedAfterCancel ?? 0}%</strong>.
+          </p>
+          <p>Đơn sẽ được điều phối lại cho tài xế khác và khách hàng sẽ nhận thông báo đổi tài xế.</p>
+          {performanceMetrics?.rewardEligible && performanceMetrics.cancellationRate.projectedAfterCancel > performanceMetrics.cancellationRate.threshold ? (
+            <p className="driver-warning-danger">Bạn có thể mất mốc thưởng ngày vì CR vượt {performanceMetrics.cancellationRate.threshold}%.</p>
+          ) : null}
+          {(performanceMetrics?.cancellationRate.projectedAfterCancel ?? 0) >= (performanceMetrics?.cancellationRate.severeThreshold ?? 8) ? (
+            <p className="driver-warning-danger">CR chạm ngưỡng nghiêm trọng, tài khoản có thể bị khóa nhận đơn 24h.</p>
+          ) : null}
+        </div>
+      </Modal>
 
       {/* ===== REVIEW DETAIL MODAL ===== */}
       {selectedReview ? (
