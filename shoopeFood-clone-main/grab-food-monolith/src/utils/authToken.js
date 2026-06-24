@@ -2,7 +2,18 @@ const crypto = require("crypto");
 
 const TOKEN_TTL_SECONDS = 60 * 60 * 24;
 
-const getSecret = () => process.env.AUTH_TOKEN_SECRET || process.env.JWT_SECRET || "grabfood-dev-secret";
+const getSecret = () => {
+  const secret = process.env.AUTH_TOKEN_SECRET || process.env.JWT_SECRET;
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_TOKEN_SECRET is required in production");
+  }
+
+  return "grabfood-dev-secret";
+};
 
 const toBase64Url = (value) => Buffer.from(value).toString("base64url");
 

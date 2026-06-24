@@ -48,7 +48,7 @@ export default function MockPaymentGatewayPage() {
       } else {
         navigate(`/tracking?orderId=${orderId}&error=payment_cancelled`, { replace: true })
       }
-    } catch (error) {
+    } catch {
       setErrorMessage('Lỗi xử lý giao dịch. Vui lòng thử lại.')
       setIsProcessing(false)
     }

@@ -574,6 +574,8 @@ function MenuManagerPanel() {
 
   useEffect(() => {
     void loadMenuData()
+    // The first load intentionally uses the initial filter state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -883,6 +885,31 @@ function MenuManagerPanel() {
                       {food.currentQuantity}/{food.defaultQuantity} món
                     </span>
                   </div>
+                  <div className="admin-actions">
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() => {
+                        setFoodForm({
+                          id: food.id,
+                          name: food.name,
+                          imageUrl: food.imageUrl || '',
+                          price: String(food.price),
+                          restaurantId: restaurant ? String(restaurant.id) : '',
+                          categoryId: food.categoryId ? String(food.categoryId) : '',
+                          defaultQuantity: String(food.defaultQuantity),
+                          currentQuantity: String(food.currentQuantity),
+                          isAvailable: food.isAvailable,
+                        })
+                        setFoodFormErrors({})
+                      }}
+                    >
+                      Sửa
+                    </button>
+                    <button type="button" className="button-danger" onClick={() => void handleDeleteFood(food)}>
+                      Xóa
+                    </button>
+                  </div>
                 </article>
               )
             })}
@@ -891,6 +918,156 @@ function MenuManagerPanel() {
           {!isLoading && foods.length === 0 ? <p className="empty-state">Không có món phù hợp với bộ lọc.</p> : null}
         </section>
 
+        <aside className="admin-form-panel">
+          <div className="driver-control-head">
+            <span>{foodForm.id ? `Sửa món #${foodForm.id}` : 'Thêm món'}</span>
+            <h2>Thông tin món ăn</h2>
+          </div>
+          <form className="admin-form" onSubmit={handleFoodSubmit}>
+            <label className="restaurant-field">
+              <span>Nhà hàng</span>
+              <select
+                value={foodForm.restaurantId}
+                onChange={(event) => updateFoodFormField('restaurantId', event.target.value)}
+              >
+                <option value="">Chọn nhà hàng</option>
+                {restaurants.map((restaurant) => (
+                  <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>
+                ))}
+              </select>
+              {foodFormErrors.restaurantId ? <small className="field-error">{foodFormErrors.restaurantId}</small> : null}
+            </label>
+            <label className="restaurant-field">
+              <span>Danh mục</span>
+              <select
+                value={foodForm.categoryId}
+                onChange={(event) => updateFoodFormField('categoryId', event.target.value)}
+              >
+                <option value="">Chọn danh mục</option>
+                {categoryOptions.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+              {foodFormErrors.categoryId ? <small className="field-error">{foodFormErrors.categoryId}</small> : null}
+            </label>
+            <label className="restaurant-field">
+              <span>Tên món</span>
+              <input value={foodForm.name} onChange={(event) => updateFoodFormField('name', event.target.value)} />
+              {foodFormErrors.name ? <small className="field-error">{foodFormErrors.name}</small> : null}
+            </label>
+            <ImageUrlField
+              id="adminMenuFoodImage"
+              label="Ảnh món"
+              value={foodForm.imageUrl}
+              onChange={(value) => updateFoodFormField('imageUrl', value)}
+            />
+            <label className="restaurant-field">
+              <span>Giá</span>
+              <input type="number" min="0" value={foodForm.price} onChange={(event) => updateFoodFormField('price', event.target.value)} />
+              {foodFormErrors.price ? <small className="field-error">{foodFormErrors.price}</small> : null}
+            </label>
+            <label className="restaurant-field">
+              <span>Số lượng mặc định</span>
+              <input type="number" min="0" value={foodForm.defaultQuantity} onChange={(event) => updateFoodFormField('defaultQuantity', event.target.value)} />
+              {foodFormErrors.defaultQuantity ? <small className="field-error">{foodFormErrors.defaultQuantity}</small> : null}
+            </label>
+            <label className="restaurant-field">
+              <span>Số lượng hiện tại</span>
+              <input type="number" min="0" value={foodForm.currentQuantity} onChange={(event) => updateFoodFormField('currentQuantity', event.target.value)} />
+              {foodFormErrors.currentQuantity ? <small className="field-error">{foodFormErrors.currentQuantity}</small> : null}
+            </label>
+            <label className="restaurant-checkbox">
+              <input type="checkbox" checked={foodForm.isAvailable} onChange={(event) => updateFoodFormField('isAvailable', event.target.checked)} />
+              <span>Đang bán</span>
+            </label>
+            <div className="restaurant-form-actions">
+              <button type="submit" className="button-primary" disabled={!canSubmitFood || isSavingFood}>
+                {isSavingFood ? 'Đang lưu...' : foodForm.id ? 'Cập nhật món' : 'Thêm món'}
+              </button>
+              <button type="button" className="button-secondary" onClick={resetFoodForm}>Làm mới</button>
+            </div>
+          </form>
+        </aside>
+
+        <section className="admin-panel">
+          <div className="admin-panel-head">
+            <div>
+              <h2>Danh mục</h2>
+              <p>Chọn một danh mục để sửa hoặc xóa.</p>
+            </div>
+          </div>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr><th>ID</th><th>Nhà hàng</th><th>Tên</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {visibleCategories.map((category) => (
+                  <tr key={category.id}>
+                    <td>{category.id}</td>
+                    <td>{restaurantById.get(category.restaurantId)?.name || category.restaurantId}</td>
+                    <td>{category.name}</td>
+                    <td>
+                      <div className="admin-actions">
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          onClick={() => {
+                            setCategoryForm({
+                              id: category.id,
+                              restaurantId: String(category.restaurantId),
+                              name: category.name,
+                            })
+                            setCategoryFormErrors({})
+                          }}
+                        >
+                          Sửa
+                        </button>
+                        <button type="button" className="button-danger" onClick={() => void handleDeleteCategory(category)}>Xóa</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside className="admin-form-panel">
+          <div className="driver-control-head">
+            <span>{categoryForm.id ? `Sửa danh mục #${categoryForm.id}` : 'Thêm danh mục'}</span>
+            <h2>Thông tin danh mục</h2>
+          </div>
+          <form className="admin-form" onSubmit={handleCategorySubmit}>
+            <label className="restaurant-field">
+              <span>Nhà hàng</span>
+              <select
+                value={categoryForm.restaurantId}
+                onChange={(event) => setCategoryForm((current) => ({ ...current, restaurantId: event.target.value }))}
+              >
+                <option value="">Chọn nhà hàng</option>
+                {restaurants.map((restaurant) => (
+                  <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>
+                ))}
+              </select>
+              {categoryFormErrors.restaurantId ? <small className="field-error">{categoryFormErrors.restaurantId}</small> : null}
+            </label>
+            <label className="restaurant-field">
+              <span>Tên danh mục</span>
+              <input
+                value={categoryForm.name}
+                onChange={(event) => setCategoryForm((current) => ({ ...current, name: event.target.value }))}
+              />
+              {categoryFormErrors.name ? <small className="field-error">{categoryFormErrors.name}</small> : null}
+            </label>
+            <div className="restaurant-form-actions">
+              <button type="submit" className="button-primary" disabled={isSavingCategory}>
+                {isSavingCategory ? 'Đang lưu...' : categoryForm.id ? 'Cập nhật' : 'Thêm danh mục'}
+              </button>
+              <button type="button" className="button-secondary" onClick={resetCategoryForm}>Làm mới</button>
+            </div>
+          </form>
+        </aside>
       </div>
     </div>
   )
@@ -930,21 +1107,12 @@ export default function AdminPage() {
   const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_QUERY_KEY)
-  const [activeResource, setActiveResource] = useState(
-    () => resolveResourceFromTab(tabFromUrl) || resourceConfigs[0].name,
-  )
+  const activeResource = resolveResourceFromTab(tabFromUrl) || resourceConfigs[0].name
 
   const config = useMemo(
     () => resourceConfigs.find((resource) => resource.name === activeResource) || resourceConfigs[0],
     [activeResource],
   )
-
-  useEffect(() => {
-    const nextResource = resolveResourceFromTab(tabFromUrl)
-    if (nextResource) {
-      setActiveResource(nextResource)
-    }
-  }, [tabFromUrl])
 
   useEffect(() => {
     let ignore = false
@@ -997,7 +1165,6 @@ export default function AdminPage() {
   }, [dashboardDrivers, dashboardOrders, dashboardRestaurants])
 
   function selectResource(name: string) {
-    setActiveResource(name)
     const tab = resourceToTab[name]
     const next = new URLSearchParams(searchParams)
     if (tab) {

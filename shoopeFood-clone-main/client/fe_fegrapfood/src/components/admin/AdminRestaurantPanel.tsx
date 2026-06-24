@@ -118,20 +118,20 @@ export default function AdminRestaurantPanel() {
     void loadData()
   }, [loadData])
 
-  useEffect(() => {
-    if (searchParams.get('action') === 'create') {
-      resetForm()
-    }
-  }, [searchParams])
-
-  function resetForm() {
+  const resetForm = useCallback(() => {
     setEditingId(null)
     setFormData(emptyForm)
     setErrors({})
     const next = new URLSearchParams(searchParams)
     next.delete('action')
     setSearchParams(next, { replace: true })
-  }
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'create') {
+      resetForm()
+    }
+  }, [resetForm, searchParams])
 
   function startCreate() {
     setEditingId(null)

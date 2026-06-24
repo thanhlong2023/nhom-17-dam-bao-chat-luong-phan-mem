@@ -62,7 +62,7 @@ export default function AdminChangeRequestsPanel() {
     }
   }
 
-  function renderPayload(payload: Partial<any>) {
+  function renderPayload(payload: Record<string, unknown>) {
     return (
       <ul className="text-sm list-disc pl-4">
         {Object.entries(payload).map(([key, value]) => (

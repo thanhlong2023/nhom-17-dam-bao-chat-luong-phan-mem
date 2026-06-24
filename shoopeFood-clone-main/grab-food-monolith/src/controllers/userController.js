@@ -1,5 +1,6 @@
 const { User, Role, UserRole, Restaurant } = require("../models");
 const { resolveUserRoles } = require("../utils/roleResolver");
+const { hashPassword } = require("../utils/password");
 
 const normalizeUser = (item) => ({
   id: item.id,
@@ -116,7 +117,7 @@ exports.createMerchant = async (req, res) => {
     const newUser = await User.create({
       fullName: String(fullName).trim(),
       phone: String(phone).trim(),
-      password: String(password).trim() || "123456",
+      password: await hashPassword(String(password).trim() || "123456"),
       ratingAvg: Number.isFinite(Number(ratingAvg)) ? Number(ratingAvg) : 5.0,
     });
 
@@ -169,7 +170,7 @@ exports.createUser = async (req, res) => {
     const newUser = await User.create({
       fullName: String(fullName).trim(),
       phone: String(phone).trim(),
-      password: String(password).trim() || "123456",
+      password: await hashPassword(String(password).trim() || "123456"),
       ratingAvg: Number.isFinite(Number(ratingAvg)) ? Number(ratingAvg) : 5.0,
     });
 
@@ -199,7 +200,10 @@ exports.updateUser = async (req, res) => {
     await item.update({
       fullName: String(fullName).trim(),
       phone: String(phone).trim(),
-      password: password !== undefined ? String(password).trim() : item.password,
+      password:
+        password !== undefined && String(password).trim()
+          ? await hashPassword(String(password).trim())
+          : item.password,
       ratingAvg: ratingAvg !== undefined && Number.isFinite(Number(ratingAvg)) ? Number(ratingAvg) : item.ratingAvg,
     });
 

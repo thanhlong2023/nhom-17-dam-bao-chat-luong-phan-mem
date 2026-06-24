@@ -11,6 +11,14 @@ import { getRoleName } from '../utils/formatters'
 import type { Restaurant } from '../types'
 import ApplyDriverModal from '../components/partner/ApplyDriverModal'
 import ApplyMerchantModal from '../components/partner/ApplyMerchantModal'
+import AddressAutocomplete from '../components/common/AddressAutocomplete'
+import {
+  createSavedAddress,
+  deleteSavedAddress,
+  getSavedAddresses,
+  updateSavedAddress,
+} from '../services/api/addresses'
+import type { AddressDetail, SavedAddress } from '../types'
 
 export default function ProfilePage() {
   useDocumentTitle(`${APP_NAME} | Hồ sơ`)
@@ -37,6 +45,15 @@ export default function ProfilePage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([])
+  const [addressText, setAddressText] = useState('')
+  const [selectedAddress, setSelectedAddress] = useState<AddressDetail | null>(null)
+  const [addressLabel, setAddressLabel] = useState('')
+  const [addressNote, setAddressNote] = useState('')
+  const [editingAddressId, setEditingAddressId] = useState<number | null>(null)
+  const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [addressFeedback, setAddressFeedback] = useState<string | null>(null)
+  const [addressError, setAddressError] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -71,6 +88,19 @@ export default function ProfilePage() {
   useEffect(() => {
     void loadRestaurants()
   }, [loadRestaurants])
+
+  const loadSavedAddresses = useCallback(async () => {
+    try {
+      setAddressError(null)
+      setSavedAddresses(await getSavedAddresses())
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : 'Không thể tải địa chỉ đã lưu')
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadSavedAddresses()
+  }, [loadSavedAddresses])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -158,6 +188,68 @@ export default function ProfilePage() {
       setPasswordError(error instanceof Error ? error.message : 'Không thể đổi mật khẩu')
     } finally {
       setIsChangingPassword(false)
+    }
+  }
+
+  function resetAddressForm() {
+    setAddressText('')
+    setSelectedAddress(null)
+    setAddressLabel('')
+    setAddressNote('')
+    setEditingAddressId(null)
+  }
+
+  async function handleSaveAddress(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAddressFeedback(null)
+    setAddressError(null)
+
+    if (!selectedAddress || selectedAddress.latitude === null || selectedAddress.longitude === null) {
+      setAddressError('Vui lòng chọn một địa chỉ hợp lệ trong danh sách gợi ý')
+      return
+    }
+
+    const payload = {
+      ...selectedAddress,
+      label: addressLabel.trim(),
+      note: addressNote.trim(),
+      latitude: selectedAddress.latitude,
+      longitude: selectedAddress.longitude,
+    }
+
+    try {
+      setIsSavingAddress(true)
+      if (editingAddressId) {
+        await updateSavedAddress(editingAddressId, payload)
+        setAddressFeedback('Đã cập nhật địa chỉ')
+      } else {
+        await createSavedAddress(payload)
+        setAddressFeedback('Đã lưu địa chỉ mới')
+      }
+      resetAddressForm()
+      await loadSavedAddresses()
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : 'Không thể lưu địa chỉ')
+    } finally {
+      setIsSavingAddress(false)
+    }
+  }
+
+  async function handleDeleteAddress(address: SavedAddress) {
+    if (!window.confirm(`Xóa địa chỉ "${address.label || address.formattedAddress}"?`)) {
+      return
+    }
+
+    try {
+      setAddressError(null)
+      await deleteSavedAddress(address.id)
+      setAddressFeedback('Đã xóa địa chỉ')
+      if (editingAddressId === address.id) {
+        resetAddressForm()
+      }
+      await loadSavedAddresses()
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : 'Không thể xóa địa chỉ')
     }
   }
 
@@ -267,6 +359,80 @@ export default function ProfilePage() {
             </button>
           </div>
         </form>
+      </div>
+
+      <div className="restaurant-form-card">
+        <span className="hero-badge">Địa chỉ</span>
+        <h2>Địa chỉ đã lưu</h2>
+        <p>Lưu địa chỉ nhà, công ty hoặc nơi nhận hàng thường xuyên.</p>
+
+        {addressFeedback ? <p className="restaurant-feedback success">{addressFeedback}</p> : null}
+        {addressError ? <p className="restaurant-feedback error">{addressError}</p> : null}
+
+        <form className="restaurant-form" onSubmit={handleSaveAddress}>
+          <div className="restaurant-form-grid">
+            <label className="restaurant-field">
+              <span>Nhãn địa chỉ</span>
+              <input value={addressLabel} onChange={(event) => setAddressLabel(event.target.value)} placeholder="Nhà, Công ty..." />
+            </label>
+            <label className="restaurant-field">
+              <span>Ghi chú giao hàng</span>
+              <input value={addressNote} onChange={(event) => setAddressNote(event.target.value)} placeholder="Tòa nhà, số tầng..." />
+            </label>
+            <div className="restaurant-field full">
+              <label htmlFor="profileSavedAddress">Địa chỉ</label>
+              <AddressAutocomplete
+                id="profileSavedAddress"
+                value={addressText}
+                isSelectionConfirmed={Boolean(selectedAddress)}
+                onTextChange={(value) => {
+                  setAddressText(value)
+                  setSelectedAddress(null)
+                }}
+                onSelect={(address) => {
+                  setSelectedAddress(address)
+                  setAddressText(address.formattedAddress)
+                }}
+                placeholder="Tìm địa chỉ tại Việt Nam"
+              />
+            </div>
+          </div>
+          <div className="restaurant-form-actions">
+            <button type="submit" className="button-primary" disabled={isSavingAddress}>
+              {isSavingAddress ? 'Đang lưu...' : editingAddressId ? 'Cập nhật địa chỉ' : 'Lưu địa chỉ'}
+            </button>
+            {editingAddressId ? <button type="button" className="button-secondary" onClick={resetAddressForm}>Hủy sửa</button> : null}
+          </div>
+        </form>
+
+        <div className="profile-restaurant-list">
+          {savedAddresses.map((address) => (
+            <article key={address.id} className="profile-restaurant-card">
+              <div>
+                <h3>{address.label || 'Địa chỉ nhận hàng'}</h3>
+                <p>{address.formattedAddress}</p>
+                {address.note ? <small>{address.note}</small> : null}
+              </div>
+              <div className="restaurant-form-actions">
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => {
+                    setEditingAddressId(address.id)
+                    setAddressLabel(address.label)
+                    setAddressNote(address.note)
+                    setAddressText(address.formattedAddress)
+                    setSelectedAddress(address)
+                  }}
+                >
+                  Sửa
+                </button>
+                <button type="button" className="button-danger" onClick={() => void handleDeleteAddress(address)}>Xóa</button>
+              </div>
+            </article>
+          ))}
+          {savedAddresses.length === 0 ? <p className="empty-state">Chưa có địa chỉ nào được lưu.</p> : null}
+        </div>
       </div>
 
       {isMerchant ? (

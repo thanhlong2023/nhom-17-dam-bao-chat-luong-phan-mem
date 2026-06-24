@@ -8,6 +8,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { getMyDriverOrderFeed, getMyCompletedOrders, updateDriverLocation } from '../services/api/drivers'
 import { acceptOrder, cancelDriverOrder, getOrderTracking, rejectDriverOffer, updateOrderStatus } from '../services/api/orders'
 import { createSocket } from '../services/socket'
+import type { BrowserSocket } from '../services/socket'
 import Modal from '../components/common/Modal'
 import type { Driver, DriverCompletedDelivery, DriverPerformanceMetrics, Order, OrderTracking, RouteLeg, RoutePoint } from '../types'
 
@@ -270,7 +271,7 @@ export default function DriverPage() {
     () => myOrders.some((order) => order.statusCode != null && activeLocationStatuses.has(order.statusCode)),
     [myOrders],
   )
-  const routeLegs = tracking?.route?.legs || []
+  const routeLegs = useMemo(() => tracking?.route?.legs || [], [tracking?.route?.legs])
   const routePolylinePoints = useMemo(() => routeLegs.flatMap((leg) => leg.geometry || []), [routeLegs])
   const mapPoints = useMemo(() => {
     const points = [...routePolylinePoints]
@@ -373,7 +374,7 @@ export default function DriverPage() {
   useEffect(() => {
     if (!driverId) return
 
-    let socket: any = null
+    let socket: BrowserSocket | null = null
     let ignore = false
 
     createSocket()
@@ -382,7 +383,7 @@ export default function DriverPage() {
         socket = s
         socket.emit('driver:join', { driverId })
 
-        socket.on('driver:order-offered', (payload: any) => {
+        socket.on('driver:order-offered', (payload: unknown) => {
           // You could display a toast notification here if desired
           console.log('New order offered via socket:', payload)
           void loadFeed()
@@ -464,7 +465,7 @@ export default function DriverPage() {
     if (!isToMerchant && !isToCustomer) return;
 
     const legKey = isToMerchant ? 'driver_to_restaurant' : 'restaurant_to_customer';
-    const leg = tracking.route?.legs?.find((l: any) => l.key === legKey);
+    const leg = tracking.route?.legs?.find((item) => item.key === legKey);
     const polyline = leg?.geometry || [];
     
     if (polyline.length === 0) return;
@@ -512,7 +513,7 @@ export default function DriverPage() {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [activeOrder?.id, activeOrder?.statusCode, tracking, driverId, currentPoint, isSimulating]);
+  }, [activeOrder, tracking, driverId, currentPoint, heading, isSimulating]);
 
   useEffect(() => {
     let isMounted = true

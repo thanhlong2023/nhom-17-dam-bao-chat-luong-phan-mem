@@ -1,5 +1,7 @@
 const { User, Role, UserRole } = require("../models");
 const { createAuthToken } = require("../utils/authToken");
+const { hashPassword, isPasswordHash, verifyPassword } = require("../utils/password");
+const crypto = require("crypto");
 
 const SUPPORTED_ROLES = new Set(["CUSTOMER", "DRIVER", "MERCHANT", "ADMIN"]);
 const PHONE_REGEX = /^0\d{9,14}$/;
@@ -43,8 +45,12 @@ exports.login = async (req, res) => {
     }
 
     const user = await findUserByPhone(phone);
-    if (!user || String(user.password) !== password) {
+    if (!user || !(await verifyPassword(password, user.password))) {
       return res.status(401).json({ message: "Sai tai khoan hoac mat khau" });
+    }
+
+    if (!isPasswordHash(user.password)) {
+      await user.update({ password: await hashPassword(password) });
     }
 
     const roleNames = (user.roles || []).map((role) => role.name);
@@ -122,7 +128,7 @@ exports.register = async (req, res) => {
     const newUser = await User.create({
       fullName,
       phone,
-      password,
+      password: await hashPassword(password),
       ratingAvg: 5.0,
     });
 
@@ -213,11 +219,11 @@ exports.changePassword = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    if (String(user.password) !== currentPassword) {
+    if (!(await verifyPassword(currentPassword, user.password))) {
       return res.status(401).json({ message: "Current password is incorrect" });
     }
 
-    await user.update({ password: newPassword });
+    await user.update({ password: await hashPassword(newPassword) });
     return res.json({ message: "Password changed" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -303,20 +309,42 @@ exports.forgotPassword = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy tài khoản với số điện thoại này" });
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = Date.now() + 3 * 60 * 1000; // 3 minutes expiration
 
-    otpCache.set(phone, { otp, expiresAt });
+    otpCache.set(phone, { otpHash: await hashPassword(otp), expiresAt });
 
-    // Simulate sending SMS
-    console.log(`\n================================`);
-    console.log(`[MOCK SMS] Yêu cầu khôi phục mật khẩu`);
-    console.log(`Gửi đến số điện thoại: ${phone}`);
-    console.log(`Mã OTP của bạn là: ${otp}`);
-    console.log(`================================\n`);
+    const webhookUrl = String(process.env.SMS_WEBHOOK_URL || "").trim();
+    const allowDevOtp = String(process.env.ALLOW_DEV_OTP || "").toLowerCase() === "true";
 
-    return res.json({ message: "Mã OTP đã được gửi" });
+    if (webhookUrl) {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.SMS_WEBHOOK_TOKEN
+            ? { Authorization: `Bearer ${process.env.SMS_WEBHOOK_TOKEN}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          to: phone,
+          message: `Ma OTP khoi phuc mat khau GrabFood cua ban la ${otp}. Ma co hieu luc trong 3 phut.`,
+        }),
+      });
+
+      if (!response.ok) {
+        otpCache.delete(phone);
+        return res.status(502).json({ message: "Không thể gửi OTP. Vui lòng thử lại." });
+      }
+    } else if (!allowDevOtp) {
+      otpCache.delete(phone);
+      return res.status(503).json({ message: "Dịch vụ SMS chưa được cấu hình" });
+    }
+
+    return res.json({
+      message: "Mã OTP đã được gửi",
+      ...(allowDevOtp && !webhookUrl ? { devOtp: otp } : {}),
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -343,7 +371,7 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ message: "Mã OTP đã hết hạn" });
     }
 
-    if (cachedOtp.otp !== otp) {
+    if (!(await verifyPassword(otp, cachedOtp.otpHash))) {
       return res.status(400).json({ message: "Mã OTP không chính xác" });
     }
 
@@ -360,7 +388,7 @@ exports.resetPassword = async (req, res) => {
       return res.status(404).json({ message: "Không tìm thấy tài khoản" });
     }
 
-    await user.update({ password: newPassword });
+    await user.update({ password: await hashPassword(newPassword) });
     otpCache.delete(phone); // Xóa OTP sau khi sử dụng thành công
 
     return res.json({ message: "Đổi mật khẩu thành công" });

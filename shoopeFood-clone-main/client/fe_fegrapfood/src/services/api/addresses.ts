@@ -1,5 +1,5 @@
-import { httpGet } from './http'
-import type { AddressDetail, AddressSuggestion, ApiResponse } from '../../types'
+import { httpDelete, httpGet, httpPost, httpPut } from './http'
+import type { AddressDetail, AddressSuggestion, ApiResponse, SavedAddress } from '../../types'
 
 type AddressRequestOptions = {
   signal?: AbortSignal
@@ -85,4 +85,26 @@ export async function reverseGeocodeAddress(latitude: number, longitude: number,
   })
 
   return unwrapAddressResponse(response)
+}
+
+export type SavedAddressPayload = Omit<SavedAddress, 'id' | 'userId' | 'createdAt'>
+
+export async function getSavedAddresses() {
+  const response = await httpGet<ApiResponse<SavedAddress[]>>('/api/addresses/mine')
+  return response.data
+}
+
+export async function createSavedAddress(payload: SavedAddressPayload) {
+  const response = await httpPost<ApiResponse<SavedAddress>>('/api/addresses/mine', payload)
+  return response.data
+}
+
+export async function updateSavedAddress(id: number, payload: SavedAddressPayload) {
+  const response = await httpPut<ApiResponse<SavedAddress>>(`/api/addresses/mine/${id}`, payload)
+  return response.data
+}
+
+export async function deleteSavedAddress(id: number) {
+  const response = await httpDelete<ApiResponse<SavedAddress>>(`/api/addresses/mine/${id}`)
+  return response.data
 }

@@ -405,7 +405,7 @@ export default function TrackingPage() {
         setIsLoading(false)
       }
     }
-  }, [showDeliveryCompletedNotice, showDriverDeliveringNotice])
+  }, [])
 
   useEffect(() => {
     if (queryOrderId && Number.isFinite(Number(queryOrderId))) {

@@ -4,6 +4,7 @@ const { sequelize, DriverLocation, Food, User, Role, UserRole } = require("../mo
 const { setUserRole } = require("../utils/roleAssignment");
 const { encodeGeohash } = require("../utils/geohash");
 const seedService = require("./seedService");
+const { hashPassword, isPasswordHash } = require("../utils/password");
 
 const getEnv = (key, fallbackValue) =>
   Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : fallbackValue;
@@ -458,6 +459,16 @@ const ensureDemoRoleAssignments = async () => {
   }
 };
 
+const ensurePasswordsHashed = async () => {
+  const users = await User.findAll({ attributes: ["id", "password"] });
+
+  for (const user of users) {
+    if (!isPasswordHash(user.password)) {
+      await user.update({ password: await hashPassword(user.password) });
+    }
+  }
+};
+
 const ensureOrderNoteColumn = async () => {
   const queryInterface = sequelize.getQueryInterface();
   const columns = await queryInterface.describeTable("orders");
@@ -490,6 +501,7 @@ const initializeDatabase = async () => {
   await ensureOrderNoteColumn();
   await ensureSingleRolePerUser();
   await ensureDemoRoleAssignments();
+  await ensurePasswordsHashed();
   await Food.resetExpiredDailyQuantities();
   await require("../models/Topping").resetExpiredDailyQuantities();
   await seedService.seedIfEmpty();

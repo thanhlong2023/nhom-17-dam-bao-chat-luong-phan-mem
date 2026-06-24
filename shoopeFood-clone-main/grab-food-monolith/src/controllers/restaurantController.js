@@ -120,6 +120,14 @@ const findMerchantById = async (userId) => {
   return ownsRestaurant ? user : null;
 };
 
+const canManageRestaurant = async (req, restaurant) => {
+  const { hasRole } = await resolveUserRoles(req);
+  return (
+    hasRole(["ADMIN"]) ||
+    (hasRole(["MERCHANT"]) && Number(restaurant.ownerId) === Number(req.user?.id))
+  );
+};
+
 // ==== PUBLIC ENDPOINTS ====
 
 /**
@@ -130,7 +138,8 @@ exports.listRestaurants = async (req, res) => {
   try {
     const { includePending } = req.query;
     const where = { deletedAt: null };
-    if (includePending !== "true") {
+    const { hasRole } = await resolveUserRoles(req);
+    if (includePending !== "true" || !hasRole(["ADMIN"])) {
       where.approvalStatus = "APPROVED";
     }
     const items = await Restaurant.findAll({ where, order: [["id", "ASC"]] });
@@ -285,6 +294,10 @@ exports.updateRestaurant = async (req, res) => {
       return withError(res, 404, "Restaurant not found");
     }
 
+    if (!(await canManageRestaurant(req, item))) {
+      return withError(res, 403, "Forbidden");
+    }
+
     // Fields that don't require approval
     const directFields = ["openingTime", "closingTime", "isOpen", "isOpenToday", "temporaryClosedReason", "temporaryClosedUntil"];
     // Fields that require approval
@@ -390,6 +403,10 @@ exports.deleteRestaurant = async (req, res) => {
       return withError(res, 404, "Restaurant not found");
     }
 
+    if (!(await canManageRestaurant(req, item))) {
+      return withError(res, 403, "Forbidden");
+    }
+
     await item.update({ deletedAt: new Date() });
 
     return withSuccess(res, 200, "Restaurant deleted", normalizeRestaurant(item));
@@ -413,6 +430,10 @@ exports.patchRestaurantStatus = async (req, res) => {
       return withError(res, 404, "Restaurant not found");
     }
 
+    if (!(await canManageRestaurant(req, item))) {
+      return withError(res, 403, "Forbidden");
+    }
+
     if (isOpen !== undefined) {
       await item.update({ isOpen: Boolean(isOpen) });
     }
@@ -434,6 +455,10 @@ exports.patchRestaurantTodayStatus = async (req, res) => {
     const item = await Restaurant.findOne({ where: { id, deletedAt: null } });
     if (!item) {
       return withError(res, 404, "Restaurant not found");
+    }
+
+    if (!(await canManageRestaurant(req, item))) {
+      return withError(res, 403, "Forbidden");
     }
 
     const updates = {};
@@ -468,6 +493,10 @@ exports.patchRestaurantLocation = async (req, res) => {
     const item = await Restaurant.findOne({ where: { id, deletedAt: null } });
     if (!item) {
       return withError(res, 404, "Restaurant not found");
+    }
+
+    if (!(await canManageRestaurant(req, item))) {
+      return withError(res, 403, "Forbidden");
     }
 
     if (latitude === undefined || longitude === undefined) {

@@ -1,18 +1,22 @@
 const normalizeAddress = require("./utils/normalize-address");
 const vietmapProvider = require("./providers/vietmap.provider");
-const mockAddressProvider = require("./providers/mock-address.provider");
+const nominatimProvider = require("./providers/nominatim.provider");
 
 const suggestionCache = new Map();
 const MAX_CACHE_SIZE = 250;
 
 const getConfiguredProvider = () => {
-  const providerName = String(process.env.ADDRESS_PROVIDER || "vietmap").toLowerCase();
+  const providerName = String(process.env.ADDRESS_PROVIDER || "auto").toLowerCase();
 
-  if (providerName === "mock") {
-    return mockAddressProvider;
+  if (providerName === "vietmap") {
+    return vietmapProvider;
   }
 
-  return vietmapProvider;
+  if (providerName === "nominatim") {
+    return nominatimProvider;
+  }
+
+  return process.env.VIETMAP_API_KEY ? vietmapProvider : nominatimProvider;
 };
 
 const rememberSuggestions = (suggestions) => {
@@ -34,10 +38,6 @@ const isMissingVietMapApiKey = (error) => error?.code === "VIETMAP_API_KEY_MISSI
 
 const warnProviderFailure = (operation, error) => {
   console.warn(`[address] VietMap ${operation} failed: ${error.message}`);
-};
-
-const warnMissingVietMapApiKey = () => {
-  console.warn("VIETMAP_API_KEY is not configured. Using mock address provider.");
 };
 
 const toEmptyDetail = (placeId) => ({
@@ -109,8 +109,7 @@ const suggestAddresses = async (keyword) => {
     return suggestions;
   } catch (error) {
     if (isMissingVietMapApiKey(error)) {
-      warnMissingVietMapApiKey();
-      const fallbackSuggestions = await mockAddressProvider.suggest(q);
+      const fallbackSuggestions = await nominatimProvider.suggest(q);
       rememberSuggestions(fallbackSuggestions);
       return fallbackSuggestions;
     }
@@ -136,20 +135,12 @@ const getAddressDetail = async (placeId, fallbackQuery = {}) => {
     }
   } catch (error) {
     if (isMissingVietMapApiKey(error)) {
-      warnMissingVietMapApiKey();
-      const fallbackDetail = await mockAddressProvider.getDetail(id);
+      const fallbackDetail = await nominatimProvider.getDetail(id);
       if (fallbackDetail) {
         return fallbackDetail;
       }
     } else {
       warnProviderFailure("detail", error);
-    }
-  }
-
-  if (provider === mockAddressProvider) {
-    const fallbackDetail = await mockAddressProvider.getDetail(id);
-    if (fallbackDetail) {
-      return fallbackDetail;
     }
   }
 
@@ -183,16 +174,12 @@ const reverseAddress = async (latitude, longitude) => {
     }
   } catch (error) {
     if (isMissingVietMapApiKey(error)) {
-      warnMissingVietMapApiKey();
+      const fallbackDetail = await nominatimProvider.reverse(lat, lng);
+      if (fallbackDetail) {
+        return fallbackDetail;
+      }
     } else {
       warnProviderFailure("reverse", error);
-    }
-  }
-
-  if (provider === mockAddressProvider) {
-    const fallbackDetail = await mockAddressProvider.reverse(lat, lng);
-    if (fallbackDetail) {
-      return fallbackDetail;
     }
   }
 

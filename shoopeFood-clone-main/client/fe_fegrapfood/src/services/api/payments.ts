@@ -21,13 +21,24 @@ export type ProcessPaymentCallbackPayload = {
   gatewayRef?: string
 }
 
+export type PaymentCallbackData = {
+  payment: PaymentData
+  transaction: {
+    id: number
+    paymentId: number
+    attemptNumber: number
+    status: string
+    transactionRef: string
+  }
+}
+
 export async function createPayment(payload: CreatePaymentPayload) {
   const response = await httpPost<ApiResponse<PaymentData>>('/api/payments/create', payload)
   return response.data
 }
 
 export async function processPaymentCallback(payload: ProcessPaymentCallbackPayload) {
-  const response = await httpPost<ApiResponse<any>>('/api/payments/callback', payload)
+  const response = await httpPost<ApiResponse<PaymentCallbackData>>('/api/payments/callback', payload)
   return response.data
 }
 

@@ -8,10 +8,10 @@ const router = express.Router();
 router.get("/me", auth, userController.getProfile);
 router.get("/merchants", auth, requireRole(["ADMIN"]), userController.listMerchants);
 router.post("/merchants", auth, requireRole(["ADMIN"]), userController.createMerchant);
-router.get("/", userController.getUsers);
-router.get("/:id", userController.getUserById);
-router.post("/", userController.createUser);
-router.put("/:id", userController.updateUser);
-router.delete("/:id", userController.deleteUser);
+router.get("/", auth, requireRole(["ADMIN"]), userController.getUsers);
+router.get("/:id", auth, requireRole(["ADMIN"]), userController.getUserById);
+router.post("/", auth, requireRole(["ADMIN"]), userController.createUser);
+router.put("/:id", auth, requireRole(["ADMIN"]), userController.updateUser);
+router.delete("/:id", auth, requireRole(["ADMIN"]), userController.deleteUser);
 
 module.exports = router;

@@ -13,6 +13,7 @@ const {
 } = require("../models");
 
 const { setUserRole } = require("../utils/roleAssignment");
+const { hashPassword } = require("../utils/password");
 
 const DEFAULT_ROLE_NAMES = ["CUSTOMER", "DRIVER", "MERCHANT", "ADMIN"];
 
@@ -92,23 +93,24 @@ exports.seedIfEmpty = async () => {
   const stockDate = Food.getStockDate();
 
   // 1. Create Users
+  const seededPassword = await hashPassword("123");
   const users = await User.bulkCreate([
     // Customers (0, 1, 2, 3, 4)
-    { fullName: "Nguyễn Văn Hùng", phone: "0901234567", password: "123" },
-    { fullName: "Trần Thị Mai", phone: "0902345678", password: "123" },
-    { fullName: "Lê Hoàng Phúc", phone: "0903456789", password: "123" },
-    { fullName: "Phạm Thu Thảo", phone: "0904567890", password: "123" },
-    { fullName: "Đặng Quang Huy", phone: "0905678901", password: "123" },
+    { fullName: "Nguyễn Văn Hùng", phone: "0901234567", password: seededPassword },
+    { fullName: "Trần Thị Mai", phone: "0902345678", password: seededPassword },
+    { fullName: "Lê Hoàng Phúc", phone: "0903456789", password: seededPassword },
+    { fullName: "Phạm Thu Thảo", phone: "0904567890", password: seededPassword },
+    { fullName: "Đặng Quang Huy", phone: "0905678901", password: seededPassword },
     // Merchants (5, 6, 7)
-    { fullName: "Chủ Phở Lệ", phone: "0911111111", password: "123" },
-    { fullName: "Chủ Cơm Tấm Ba Ghiền", phone: "0922222222", password: "123" },
-    { fullName: "Quản lý Highlands Coffee", phone: "0933333333", password: "123" },
+    { fullName: "Chủ Phở Lệ", phone: "0911111111", password: seededPassword },
+    { fullName: "Chủ Cơm Tấm Ba Ghiền", phone: "0922222222", password: seededPassword },
+    { fullName: "Quản lý Highlands Coffee", phone: "0933333333", password: seededPassword },
     // Drivers (8, 9, 10)
-    { fullName: "Tài Xế Bùi Tuấn", phone: "0981111111", password: "123" },
-    { fullName: "Tài Xế Ngô Vinh", phone: "0982222222", password: "123" },
-    { fullName: "Tài Xế Vũ Khang", phone: "0983333333", password: "123" },
+    { fullName: "Tài Xế Bùi Tuấn", phone: "0981111111", password: seededPassword },
+    { fullName: "Tài Xế Ngô Vinh", phone: "0982222222", password: seededPassword },
+    { fullName: "Tài Xế Vũ Khang", phone: "0983333333", password: seededPassword },
     // Admin (11)
-    { fullName: "Admin System", phone: "0999999999", password: "123" },
+    { fullName: "Admin System", phone: "0999999999", password: seededPassword },
   ]);
 
   // 2. Create Restaurants

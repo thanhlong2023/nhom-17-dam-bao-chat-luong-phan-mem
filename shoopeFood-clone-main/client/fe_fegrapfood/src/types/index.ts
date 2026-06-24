@@ -168,6 +168,14 @@ export type AddressDetail = {
   raw?: unknown
 }
 
+export type SavedAddress = AddressDetail & {
+  id: number
+  userId: number
+  label: string
+  note: string
+  createdAt?: string
+}
+
 export type OrderItem = {
   id: number
   orderId: number

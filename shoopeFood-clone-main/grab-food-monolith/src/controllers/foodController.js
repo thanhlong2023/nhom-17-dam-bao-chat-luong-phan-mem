@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const { Food, Category, Topping } = require("../models");
+const { getManagedRestaurant } = require("../utils/restaurantAccess");
 
 const normalizeFood = (item) => ({
   id: item.id,
@@ -139,13 +140,19 @@ exports.createFood = async (req, res) => {
       return res.status(400).json({ message: "currentQuantity cannot exceed defaultQuantity" });
     }
 
-    let parsedCategoryId = null;
-    if (categoryId !== undefined && categoryId !== null && Number.isFinite(Number(categoryId))) {
-      parsedCategoryId = Number(categoryId);
-      const category = await Category.findByPk(parsedCategoryId);
-      if (!category) {
-        return res.status(400).json({ message: "Category not found" });
-      }
+    if (!Number.isInteger(Number(categoryId)) || Number(categoryId) <= 0) {
+      return res.status(400).json({ message: "categoryId is required" });
+    }
+
+    const parsedCategoryId = Number(categoryId);
+    const category = await Category.findByPk(parsedCategoryId);
+    if (!category) {
+      return res.status(400).json({ message: "Category not found" });
+    }
+
+    const access = await getManagedRestaurant(req, category.restaurantId);
+    if (!access.restaurant) {
+      return res.status(access.status).json({ message: access.message });
     }
 
     const newFood = await Food.create({
@@ -171,10 +178,19 @@ exports.updateFood = async (req, res) => {
 
     const id = Number(req.params.id);
     const { name, price, categoryId, imageUrl, isAvailable, defaultQuantity, currentQuantity } = req.body;
-    const item = await Food.findByPk(id);
+    const item = await Food.findByPk(id, { include: [{ model: Category, as: "category" }] });
 
     if (!item) {
       return res.status(404).json({ message: "Food not found" });
+    }
+
+    if (!item.category) {
+      return res.status(409).json({ message: "Food is not assigned to a category" });
+    }
+
+    const currentAccess = await getManagedRestaurant(req, item.category.restaurantId);
+    if (!currentAccess.restaurant) {
+      return res.status(currentAccess.status).json({ message: currentAccess.message });
     }
 
     let trimmedName = item.name;
@@ -204,9 +220,14 @@ exports.updateFood = async (req, res) => {
         }
         nextCategoryId = parsedCategoryId;
         if (nextCategoryId !== item.categoryId) {
-          const category = await Category.findByPk(nextCategoryId);
-          if (!category) {
+          const nextCategory = await Category.findByPk(nextCategoryId);
+          if (!nextCategory) {
             return res.status(400).json({ message: "Category not found" });
+          }
+
+          const nextAccess = await getManagedRestaurant(req, nextCategory.restaurantId);
+          if (!nextAccess.restaurant) {
+            return res.status(nextAccess.status).json({ message: nextAccess.message });
           }
         }
       }
@@ -259,10 +280,19 @@ exports.updateFood = async (req, res) => {
 exports.deleteFood = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const item = await Food.findByPk(id);
+    const item = await Food.findByPk(id, { include: [{ model: Category, as: "category" }] });
 
     if (!item) {
       return res.status(404).json({ message: "Food not found" });
+    }
+
+    if (!item.category) {
+      return res.status(409).json({ message: "Food is not assigned to a category" });
+    }
+
+    const access = await getManagedRestaurant(req, item.category.restaurantId);
+    if (!access.restaurant) {
+      return res.status(access.status).json({ message: access.message });
     }
 
     await item.destroy();

@@ -8,7 +8,7 @@ type AuthView = 'login' | 'register' | 'forgot_password' | 'reset_password'
 type AuthModalProps = {
   isOpen: boolean
   onClose: () => void
-  initialView?: 'login' | 'register'
+  initialView?: AuthView
   callbackUrl?: string
 }
 

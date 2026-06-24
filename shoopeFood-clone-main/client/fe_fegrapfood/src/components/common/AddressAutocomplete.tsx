@@ -149,7 +149,7 @@ export default function AddressAutocomplete({
             </div>
           ) : null}
 
-          <p className="address-suggestion-provider">Powered by VietMap</p>
+          <p className="address-suggestion-provider">Dữ liệu bản đồ Việt Nam</p>
         </div>
       ) : null}
     </div>

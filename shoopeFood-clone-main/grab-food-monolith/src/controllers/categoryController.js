@@ -1,4 +1,5 @@
 const { Category, Restaurant, Food } = require("../models");
+const { getManagedRestaurant } = require("../utils/restaurantAccess");
 
 const normalizeCategory = (item) => ({
   id: item.id,
@@ -57,6 +58,11 @@ exports.createCategory = async (req, res) => {
       return res.status(400).json({ message: "Restaurant not found" });
     }
 
+    const access = await getManagedRestaurant(req, restaurant.id);
+    if (!access.restaurant) {
+      return res.status(access.status).json({ message: access.message });
+    }
+
     const newCategory = await Category.create({
       restaurantId: Number(restaurantId),
       name: trimmedName,
@@ -78,6 +84,11 @@ exports.updateCategory = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
     }
 
+    const currentAccess = await getManagedRestaurant(req, item.restaurantId);
+    if (!currentAccess.restaurant) {
+      return res.status(currentAccess.status).json({ message: currentAccess.message });
+    }
+
     const trimmedName = typeof name === "string" ? name.trim() : "";
     if (!trimmedName && restaurantId === undefined) {
       return res.status(400).json({ message: "Nothing to update" });
@@ -94,6 +105,11 @@ exports.updateCategory = async (req, res) => {
         const restaurant = await Restaurant.findByPk(nextRestaurantId);
         if (!restaurant) {
           return res.status(400).json({ message: "Restaurant not found" });
+        }
+
+        const nextAccess = await getManagedRestaurant(req, nextRestaurantId);
+        if (!nextAccess.restaurant) {
+          return res.status(nextAccess.status).json({ message: nextAccess.message });
         }
       }
     }
@@ -116,6 +132,11 @@ exports.deleteCategory = async (req, res) => {
 
     if (!item) {
       return res.status(404).json({ message: "Category not found" });
+    }
+
+    const access = await getManagedRestaurant(req, item.restaurantId);
+    if (!access.restaurant) {
+      return res.status(access.status).json({ message: access.message });
     }
 
     // Guard to prevent accidental deletion if there are associated food items

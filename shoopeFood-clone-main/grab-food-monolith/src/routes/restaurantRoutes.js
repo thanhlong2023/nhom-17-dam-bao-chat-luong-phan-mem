@@ -2,15 +2,16 @@ const express = require("express");
 const restaurantController = require("../controllers/restaurantController");
 const auth = require("../middleware/auth");
 const requireRole = require("../middleware/role");
+const optionalAuth = require("../middleware/optionalAuth");
 
 const router = express.Router();
 
 // ==== PUBLIC ROUTES ====
-router.get("/", restaurantController.listRestaurants);
+router.get("/", optionalAuth, restaurantController.listRestaurants);
 
 // ==== AUTHENTICATED ROUTES ====
 router.get("/mine", auth, restaurantController.listMyRestaurants);
-router.post("/", auth, restaurantController.createRestaurant);
+router.post("/", auth, requireRole(["ADMIN", "MERCHANT"]), restaurantController.createRestaurant);
 
 // ==== STATUS ROUTES ====
 router.patch("/:id/status", auth, restaurantController.patchRestaurantStatus);

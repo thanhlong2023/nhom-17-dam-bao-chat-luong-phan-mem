@@ -35,7 +35,23 @@ exports.createTopping = async (req, res) => {
       return withError(res, 403, "Not allowed to add topping to this restaurant");
     }
 
-    if (!name) return withError(res, 400, "name is required");
+    const normalizedName = String(name || "").trim();
+    const normalizedPrice = Number(price);
+    const normalizedDefaultQuantity = Number(defaultQuantity);
+    const normalizedCurrentQuantity = Number(currentQuantity);
+    if (!normalizedName) return withError(res, 400, "name is required");
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
+      return withError(res, 400, "price must be a non-negative number");
+    }
+    if (!Number.isInteger(normalizedDefaultQuantity) || normalizedDefaultQuantity < 0) {
+      return withError(res, 400, "defaultQuantity must be a non-negative integer");
+    }
+    if (!Number.isInteger(normalizedCurrentQuantity) || normalizedCurrentQuantity < 0) {
+      return withError(res, 400, "currentQuantity must be a non-negative integer");
+    }
+    if (normalizedCurrentQuantity > normalizedDefaultQuantity) {
+      return withError(res, 400, "currentQuantity cannot exceed defaultQuantity");
+    }
 
     const todayStr = getLocalDateOnly();
     if (startDate && startDate < todayStr) {
@@ -50,11 +66,11 @@ exports.createTopping = async (req, res) => {
 
     const topping = await Topping.create({
       restaurantId,
-      name: String(name).trim(),
-      price: Number(price) || 0,
+      name: normalizedName,
+      price: normalizedPrice,
       isAvailable: Boolean(isAvailable),
-      defaultQuantity: Number(defaultQuantity) || 0,
-      currentQuantity: Number(currentQuantity) || 0,
+      defaultQuantity: normalizedDefaultQuantity,
+      currentQuantity: normalizedCurrentQuantity,
       startDate: startDate || null,
       endDate: endDate || null,
     });
@@ -94,11 +110,34 @@ exports.updateTopping = async (req, res) => {
     }
 
     const updates = {};
-    if (name !== undefined) updates.name = String(name).trim();
-    if (price !== undefined) updates.price = Number(price);
+    if (name !== undefined) {
+      const normalizedName = String(name).trim();
+      if (!normalizedName) return withError(res, 400, "name cannot be empty");
+      updates.name = normalizedName;
+    }
+    if (price !== undefined) {
+      const normalizedPrice = Number(price);
+      if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
+        return withError(res, 400, "price must be a non-negative number");
+      }
+      updates.price = normalizedPrice;
+    }
     if (isAvailable !== undefined) updates.isAvailable = Boolean(isAvailable);
-    if (defaultQuantity !== undefined) updates.defaultQuantity = Number(defaultQuantity);
-    if (currentQuantity !== undefined) updates.currentQuantity = Number(currentQuantity);
+    const nextDefaultQuantity =
+      defaultQuantity !== undefined ? Number(defaultQuantity) : Number(topping.defaultQuantity);
+    const nextCurrentQuantity =
+      currentQuantity !== undefined ? Number(currentQuantity) : Number(topping.currentQuantity);
+    if (!Number.isInteger(nextDefaultQuantity) || nextDefaultQuantity < 0) {
+      return withError(res, 400, "defaultQuantity must be a non-negative integer");
+    }
+    if (!Number.isInteger(nextCurrentQuantity) || nextCurrentQuantity < 0) {
+      return withError(res, 400, "currentQuantity must be a non-negative integer");
+    }
+    if (nextCurrentQuantity > nextDefaultQuantity) {
+      return withError(res, 400, "currentQuantity cannot exceed defaultQuantity");
+    }
+    if (defaultQuantity !== undefined) updates.defaultQuantity = nextDefaultQuantity;
+    if (currentQuantity !== undefined) updates.currentQuantity = nextCurrentQuantity;
     if (startDate !== undefined) updates.startDate = startDate || null;
     if (endDate !== undefined) updates.endDate = endDate || null;
 
@@ -166,6 +205,9 @@ exports.assignToFood = async (req, res) => {
 
     // Verify all toppings belong to the restaurant
     const toppings = await Topping.findAll({ where: { id: toppingIds } });
+    if (toppings.length !== new Set(toppingIds.map(Number)).size) {
+      return withError(res, 400, "One or more toppings do not exist");
+    }
     for (const t of toppings) {
       if (t.restaurantId !== restaurantId) {
         return withError(res, 400, `Topping ${t.id} does not belong to this restaurant`);

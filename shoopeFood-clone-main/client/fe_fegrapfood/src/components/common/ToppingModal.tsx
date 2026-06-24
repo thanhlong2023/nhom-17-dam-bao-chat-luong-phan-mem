@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Food, Topping } from '../../types'
+import type { Food } from '../../types'
 
 type ToppingModalProps = {
   isOpen: boolean

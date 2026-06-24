@@ -1,14 +1,20 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import { AUTH_TOKEN_STORAGE_KEY, AUTH_USER_STORAGE_KEY } from '../constants/auth'
-import { activateRole as activateRoleRequest, getCurrentUser, login as loginRequest } from '../services/api/auth'
+import {
+  activateRole as activateRoleRequest,
+  getCurrentUser,
+  login as loginRequest,
+  registerCustomer,
+} from '../services/api/auth'
 import type { AuthUser, LoginPayload, UserRole } from '../types'
+import type { RegisterPayload } from '../services/api/auth'
 
 type AuthContextValue = {
   user: AuthUser | null
   token: string | null
   isAuthenticated: boolean
   login: (payload: LoginPayload) => Promise<AuthUser>
-  register: (payload: any) => Promise<AuthUser>
+  register: (payload: RegisterPayload) => Promise<AuthUser>
   logout: () => void
   refreshUser: () => Promise<AuthUser | null>
   activateRole: (role: UserRole) => Promise<AuthUser>
@@ -50,8 +56,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return session.user
   }
 
-  async function register(payload: any) {
-    const { registerCustomer } = await import('../services/api/auth')
+  async function register(payload: RegisterPayload) {
     const session = await registerCustomer(payload)
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, session.token)
     localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(session.user))
@@ -109,21 +114,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return (user.roles || []).some((item) => roles.includes(item))
   }
 
-  const value = useMemo(
-    () => ({
-      user,
-      token,
-      isAuthenticated: Boolean(token && user),
-      login,
-      register,
-      logout,
-      refreshUser,
-      activateRole,
-      hasRole,
-      hasAssignedRole,
-    }),
-    [token, user],
-  )
+  const value = {
+    user,
+    token,
+    isAuthenticated: Boolean(token && user),
+    login,
+    register,
+    logout,
+    refreshUser,
+    activateRole,
+    hasRole,
+    hasAssignedRole,
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
