@@ -20,6 +20,8 @@ const UserAddress = require("./UserAddress");
 const Topping = require("./Topping");
 const FoodTopping = require("./FoodTopping");
 const OrderItemTopping = require("./OrderItemTopping");
+const Voucher = require("./Voucher");
+const SystemSetting = require("./SystemSetting");
 
 User.belongsToMany(Role, { through: UserRole, foreignKey: "userId", otherKey: "roleId", as: "roles" });
 Role.belongsToMany(User, { through: UserRole, foreignKey: "roleId", otherKey: "userId", as: "users" });
@@ -121,4 +123,6 @@ module.exports = {
   Topping,
   FoodTopping,
   OrderItemTopping,
+  Voucher,
+  SystemSetting,
 };

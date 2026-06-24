@@ -15,6 +15,7 @@ const {
   Review,
   Topping,
   OrderItemTopping,
+  Voucher,
 } = require("../models");
 const orderRepository = require("../repositories/orderRepository");
 const orderFactory = require("../factories/orderFactory");
@@ -508,8 +509,46 @@ exports.createOrder = async (req, res) => {
         }
       }
 
+      let finalDiscountAmount = normalizedDiscount;
+
+      if (voucherId) {
+        const voucher = await Voucher.findByPk(Number(voucherId), { transaction, lock: transaction.LOCK.UPDATE });
+        if (!voucher || !voucher.isActive) {
+          throw createHttpError(400, "Voucher is invalid or disabled");
+        }
+        
+        const now = new Date();
+        if ((voucher.validFrom && now < new Date(voucher.validFrom)) || (voucher.validUntil && now > new Date(voucher.validUntil))) {
+          throw createHttpError(400, "Voucher is expired or not yet valid");
+        }
+        if (voucher.usageLimit !== null && voucher.usedCount >= voucher.usageLimit) {
+          throw createHttpError(400, "Voucher usage limit reached");
+        }
+        if (normalizedSubtotal < Number(voucher.minOrderValue)) {
+          throw createHttpError(400, `Min order value for this voucher is ${voucher.minOrderValue}`);
+        }
+
+        let calculatedDiscount = 0;
+        if (voucher.discountType === "PERCENTAGE") {
+          calculatedDiscount = (normalizedSubtotal * Number(voucher.discountValue)) / 100;
+          if (voucher.maxDiscountAmount && calculatedDiscount > Number(voucher.maxDiscountAmount)) {
+            calculatedDiscount = Number(voucher.maxDiscountAmount);
+          }
+        } else {
+          calculatedDiscount = Number(voucher.discountValue);
+        }
+
+        if (calculatedDiscount > normalizedSubtotal) {
+          calculatedDiscount = normalizedSubtotal;
+        }
+
+        finalDiscountAmount = calculatedDiscount;
+        voucher.usedCount += 1;
+        await voucher.save({ transaction });
+      }
+
       const shippingFee = shippingService.calculateShippingFee(normalizedDistance, normalizedSubtotal, shippingType);
-      const totalAmount = Math.max(0, normalizedSubtotal + shippingFee + normalizedTax - normalizedDiscount);
+      const totalAmount = Math.max(0, normalizedSubtotal + shippingFee + normalizedTax - finalDiscountAmount);
 
       const orderPayload = orderFactory.buildCreatePayload({
         orderCode,
@@ -526,7 +565,7 @@ exports.createOrder = async (req, res) => {
         taxAmount: normalizedTax,
         totalAmount,
         shippingFee,
-        discountAmount: normalizedDiscount,
+        discountAmount: finalDiscountAmount,
         statusId: statusInfo.id,
       });
 

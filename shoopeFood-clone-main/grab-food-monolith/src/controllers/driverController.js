@@ -252,6 +252,44 @@ exports.getMyPerformanceMetrics = async (req, res) => {
   }
 };
 
+exports.getDriverPerformanceMetricsAdmin = async (req, res) => {
+  try {
+    const driverId = Number(req.params.id);
+    if (!Number.isFinite(driverId)) {
+      return res.status(400).json({ message: "Invalid driver id" });
+    }
+
+    const driver = await findApprovedDriver(driverId);
+    if (!driver) {
+      return res.status(404).json({ message: "Driver not found or not approved" });
+    }
+
+    const metrics = await driverPerformanceService.calculateDriverMetrics(driverId);
+    return res.json({ data: metrics });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+exports.revokeDriverPenalty = async (req, res) => {
+  try {
+    const penaltyId = Number(req.params.penaltyId);
+    const { DriverPenalty } = require("../models");
+    
+    const penalty = await DriverPenalty.findByPk(penaltyId);
+    if (!penalty) {
+      return res.status(404).json({ message: "Penalty not found" });
+    }
+
+    penalty.endsAt = new Date(); // Revoke by setting endsAt to now
+    await penalty.save();
+
+    return res.json({ message: "Penalty revoked successfully", data: penalty });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getDrivingRoute = async (req, res) => {
   try {
     if (req.user?.role !== "DRIVER") {

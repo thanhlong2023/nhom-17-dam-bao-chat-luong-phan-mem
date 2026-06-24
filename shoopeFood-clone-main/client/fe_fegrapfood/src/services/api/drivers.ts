@@ -49,3 +49,13 @@ export async function updateDriverLocation(driverId: number, payload: UpdateDriv
   const response = await httpPost<ApiResponse<DriverLocation>>(`/api/drivers/${driverId}/location`, payload)
   return response.data
 }
+
+export async function getDriverPerformanceMetricsAdmin(driverId: number) {
+  const response = await httpGet<ApiResponse<DriverPerformanceMetrics>>(`/api/drivers/admin/${driverId}/metrics`)
+  return response.data
+}
+
+export async function revokeDriverPenalty(penaltyId: number) {
+  const response = await httpPost<ApiResponse<unknown>>(`/api/drivers/admin/penalties/${penaltyId}/revoke`, {})
+  return response.data
+}

@@ -10,6 +10,8 @@ router.get("/me/metrics", auth, requireRole(["DRIVER"]), driverController.getMyP
 router.get("/me/route", auth, requireRole(["DRIVER"]), driverController.getDrivingRoute);
 router.get("/me/completed", auth, requireRole(["DRIVER"]), driverController.getMyCompletedOrders);
 router.get("/", auth, requireRole(["ADMIN", "DRIVER"]), driverController.getDrivers);
+router.get("/admin/:id/metrics", auth, requireRole(["ADMIN"]), driverController.getDriverPerformanceMetricsAdmin);
+router.post("/admin/penalties/:penaltyId/revoke", auth, requireRole(["ADMIN"]), driverController.revokeDriverPenalty);
 router.get("/:id/info", auth, driverController.getDriverInfo);
 router.get("/:id/profile", auth, driverController.getDriverProfile);
 router.get("/:id/location", auth, driverController.getLatestDriverLocation);

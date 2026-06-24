@@ -12,15 +12,16 @@ import { reverseGeocodeAddress } from '../services/api/addresses'
 import { createFood, getFoods, updateFood, deleteFood, type FoodPayload } from '../services/api/foods'
 import { createCategory, getCategories } from '../services/api/categories'
 import { createTopping, updateTopping, deleteTopping, getRestaurantToppings, assignToFood } from '../services/api/toppings'
+import { validateVoucher, type VoucherValidationResult } from '../services/api/vouchers'
 import { foodPhotoStyle } from '../utils/foodImage'
 import { restaurantCoverStyle } from '../utils/restaurantImage'
 import { getCartDraft, saveCartDraft, type CartState } from '../utils/cartDraft'
 import { calculateDistanceKm } from '../utils/geoUtils'
 import { ErrorModal } from '../components/ErrorModal'
-import { setLastOrderId } from '../utils/orderStorage'
+
 import { saveCheckoutDraft } from '../utils/checkoutDraft'
 import { ToppingModal } from '../components/common/ToppingModal'
-import type { AddressDetail, Restaurant, Food, Category, CreateOrderPayload, Order, Topping } from '../types'
+import type { AddressDetail, Restaurant, Food, Category, CreateOrderPayload, Topping } from '../types'
 
 type CheckoutState = {
   receiverAddress: string
@@ -186,6 +187,11 @@ export default function RestaurantDetailPage() {
   const [selectedDeliveryAddress, setSelectedDeliveryAddress] = useState<AddressDetail | null>(null)
   const [isLocating, setIsLocating] = useState(false)
 
+  const [voucherCode, setVoucherCode] = useState('')
+  const [appliedVoucher, setAppliedVoucher] = useState<VoucherValidationResult | null>(null)
+  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false)
+  const [voucherError, setVoucherError] = useState<string | null>(null)
+
   const isAdmin = user?.role === 'ADMIN'
   const isMerchantOwner = Boolean(
     restaurant && user && user.role === 'MERCHANT' && restaurant.ownerId === user.id,
@@ -329,9 +335,27 @@ export default function RestaurantDetailPage() {
   }, [cartItems.length, distanceKm, roundedDistance])
 
   const shippingFee = shippingPrices ? shippingPrices[checkout.shippingType] : 0
-  const discountAmount = 0
+  const discountAmount = appliedVoucher ? appliedVoucher.discountAmount : 0
   const totalAmount = Math.max(0, subtotal + shippingFee - discountAmount)
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
+
+  // Re-validate voucher if subtotal changes significantly
+  useEffect(() => {
+    if (appliedVoucher && subtotal < appliedVoucher.minOrderValue) {
+      setAppliedVoucher(null)
+      setVoucherError(`Đơn hàng chưa đạt tối thiểu ${formatMoney(appliedVoucher.minOrderValue)}đ để dùng mã này.`)
+    } else if (appliedVoucher && appliedVoucher.discountType === 'PERCENTAGE') {
+      // Re-calculate the dynamic discount amount
+      let newDiscount = (subtotal * appliedVoucher.discountValue) / 100
+      if (appliedVoucher.maxDiscountAmount && newDiscount > appliedVoucher.maxDiscountAmount) {
+        newDiscount = appliedVoucher.maxDiscountAmount
+      }
+      if (newDiscount > subtotal) newDiscount = subtotal
+      if (newDiscount !== appliedVoucher.discountAmount) {
+        setAppliedVoucher(prev => prev ? { ...prev, discountAmount: newDiscount } : null)
+      }
+    }
+  }, [subtotal, appliedVoucher])
 
   useEffect(() => {
     const receiverLat = toNullableCoordinate(checkout.receiverLat)
@@ -496,6 +520,28 @@ export default function RestaurantDetailPage() {
     return null
   }
 
+  async function handleApplyVoucher() {
+    const code = voucherCode.trim()
+    if (!code) return
+    try {
+      setIsApplyingVoucher(true)
+      setVoucherError(null)
+      const res = await validateVoucher(code, subtotal)
+      setAppliedVoucher(res)
+      setVoucherCode('')
+    } catch (error) {
+      setVoucherError(error instanceof Error ? error.message : 'Mã giảm giá không hợp lệ')
+      setAppliedVoucher(null)
+    } finally {
+      setIsApplyingVoucher(false)
+    }
+  }
+
+  function handleRemoveVoucher() {
+    setAppliedVoucher(null)
+    setVoucherError(null)
+  }
+
   async function handleOrderSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const validationError = validateOrder()
@@ -539,6 +585,7 @@ export default function RestaurantDetailPage() {
         discountAmount,
         taxAmount: 0,
         totalAmount,
+        voucherId: appliedVoucher?.id,
       },
       items: cartItems.map((item) => {
         const toppingNames = item.toppings
@@ -1550,6 +1597,44 @@ export default function RestaurantDetailPage() {
                         prices={shippingPrices}
                       />
                     </div>
+                  </div>
+
+                  <div className="restaurant-field full mb-4">
+                    <label>Mã giảm giá</label>
+                    {appliedVoucher ? (
+                      <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                        <div>
+                          <p className="text-sm font-bold text-green-700 m-0">{appliedVoucher.code}</p>
+                          <p className="text-xs text-green-600 m-0">Đã giảm {formatMoney(appliedVoucher.discountAmount)}đ</p>
+                        </div>
+                        <button type="button" className="text-sm font-semibold text-red-500 hover:text-red-700 bg-transparent border-0 cursor-pointer" onClick={handleRemoveVoucher}>Xóa</button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 relative">
+                        <input
+                          type="text"
+                          placeholder="Nhập mã giảm giá..."
+                          value={voucherCode}
+                          onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                          className="flex-1 uppercase"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleApplyVoucher();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="button-primary whitespace-nowrap !px-4"
+                          disabled={!voucherCode.trim() || isApplyingVoucher}
+                          onClick={handleApplyVoucher}
+                        >
+                          {isApplyingVoucher ? 'Đang kiểm tra...' : 'Áp dụng'}
+                        </button>
+                      </div>
+                    )}
+                    {voucherError && <p className="text-xs text-red-500 mt-1.5 font-medium">{voucherError}</p>}
                   </div>
 
                   <div className="flex flex-col gap-3 mt-4 mb-4">

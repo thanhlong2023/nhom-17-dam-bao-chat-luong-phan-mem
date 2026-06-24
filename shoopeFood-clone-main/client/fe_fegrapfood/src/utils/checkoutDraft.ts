@@ -40,6 +40,7 @@ export type CheckoutDraft = {
     discountAmount: number
     taxAmount: number
     totalAmount: number
+    voucherId?: number
   }
   items: CheckoutDraftItem[]
 }
@@ -90,6 +91,7 @@ export function buildCreateOrderPayloadFromDraft(draft: CheckoutDraft): CreateOr
     taxAmount: draft.pricing.taxAmount,
     idempotencyKey: draft.idempotencyKey,
     note: draft.note,
+    voucherId: draft.pricing.voucherId,
     items: draft.items.map((item) => ({
       foodId: item.foodId,
       quantity: item.quantity,

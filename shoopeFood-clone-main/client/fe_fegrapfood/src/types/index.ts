@@ -138,6 +138,7 @@ export type CreateOrderPayload = {
   taxAmount?: number
   idempotencyKey?: string
   note?: string
+  voucherId?: number
   items: OrderItemPayload[]
 }
 
@@ -408,4 +409,29 @@ export type UpdateDriverLocationPayload = {
   longitude: number
   heading?: number
   speedKmh?: number
+}
+
+export type Voucher = {
+  id: number
+  code: string
+  discountType: 'FIXED' | 'PERCENTAGE'
+  discountValue: number
+  minOrderValue: number
+  maxDiscountAmount: number | null
+  validFrom: string
+  validUntil: string
+  usageLimit: number | null
+  usedCount: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type SystemSetting = {
+  id: number
+  key: string
+  value: string
+  description: string | null
+  createdAt: string
+  updatedAt: string
 }

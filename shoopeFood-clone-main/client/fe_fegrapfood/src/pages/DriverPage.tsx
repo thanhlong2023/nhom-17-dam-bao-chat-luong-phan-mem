@@ -369,6 +369,44 @@ export default function DriverPage() {
     void loadTracking(activeOrderId)
   }, [activeOrderId, loadTracking])
 
+  // Websocket listener for realtime notifications
+  useEffect(() => {
+    if (!driverId) return
+
+    let socket: any = null
+    let ignore = false
+
+    createSocket()
+      .then((s) => {
+        if (ignore) return
+        socket = s
+        socket.emit('driver:join', { driverId })
+
+        socket.on('driver:order-offered', (payload: any) => {
+          // You could display a toast notification here if desired
+          console.log('New order offered via socket:', payload)
+          void loadFeed()
+        })
+        
+        socket.on('driver:order-status-changed', () => {
+          void loadFeed()
+        })
+      })
+      .catch((err) => {
+        console.warn('Socket initialization failed:', err)
+      })
+
+    return () => {
+      ignore = true
+      if (socket) {
+        socket.off('driver:order-offered')
+        socket.off('driver:order-status-changed')
+        socket.emit('driver:leave', { driverId })
+        socket.disconnect()
+      }
+    }
+  }, [driverId, loadFeed])
+
   useEffect(() => {
     if (!driverId || !navigator.geolocation) {
       setGpsStatus('Trình nhúng không hỗ trợ GPS, dùng vị trí cuối cùng nếu có.')

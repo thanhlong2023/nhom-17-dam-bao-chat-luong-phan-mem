@@ -12,6 +12,10 @@ import { getDrivers } from '../services/api/drivers'
 import { getOrders } from '../services/api/orders'
 import AdminCategoryPanel from '../components/admin/AdminCategoryPanel'
 import AdminDriverApplicationsPanel from '../components/admin/AdminDriverApplicationsPanel'
+import AdminChangeRequestsPanel from '../components/admin/AdminChangeRequestsPanel'
+import AdminDriverPerformancePanel from '../components/admin/AdminDriverPerformancePanel'
+import AdminVouchersPanel from '../components/admin/AdminVouchersPanel'
+import AdminSettingsPanel from '../components/admin/AdminSettingsPanel'
 import ImageUrlField from '../components/common/ImageUrlField'
 import { getAllRestaurantsForAdmin } from '../services/api/restaurants'
 import { foodPhotoStyle } from '../utils/foodImage'
@@ -102,6 +106,24 @@ const resourceConfigs: ResourceConfig[] = [
     canDelete: false,
   },
   {
+    name: 'vouchers',
+    title: 'Khuyến mãi (Vouchers)',
+    description: 'Quản lý mã giảm giá.',
+    columns: [],
+    fields: [],
+    canCreate: false,
+    canDelete: false,
+  },
+  {
+    name: 'settings',
+    title: 'Cài đặt hệ thống',
+    description: 'Quản lý các biến môi trường và cấu hình.',
+    columns: [],
+    fields: [],
+    canCreate: false,
+    canDelete: false,
+  },
+  {
     name: 'orders',
     title: 'Đơn hàng',
     description: 'Theo dõi và cập nhật trạng thái đơn hàng.',
@@ -149,9 +171,27 @@ const resourceConfigs: ResourceConfig[] = [
     canDelete: false,
   },
   {
+    name: 'restaurant-change-requests',
+    title: 'Yêu cầu đổi thông tin',
+    description: 'Duyệt các yêu cầu thay đổi thông tin từ nhà hàng.',
+    columns: [],
+    fields: [],
+    canCreate: false,
+    canDelete: false,
+  },
+  {
     name: 'driver-applications',
     title: 'Đơn tài xế',
     description: 'Duyệt đơn đăng ký tài xế từ khách hàng.',
+    columns: [],
+    fields: [],
+    canCreate: false,
+    canDelete: false,
+  },
+  {
+    name: 'driver-performance',
+    title: 'Hiệu suất Tài xế',
+    description: 'Kiểm tra AR, CR, Rating và xử lý khiếu nại phạt tài xế.',
     columns: [],
     fields: [],
     canCreate: false,
@@ -864,7 +904,11 @@ const tabToResource: Record<string, string> = {
   restaurants: 'restaurant-manager',
   foods: 'foods',
   categories: 'category-manager',
+  'change-requests': 'restaurant-change-requests',
   'driver-applications': 'driver-applications',
+  'driver-performance': 'driver-performance',
+  vouchers: 'vouchers',
+  settings: 'settings',
   drivers: 'drivers',
   users: 'users',
 }
@@ -1024,8 +1068,16 @@ export default function AdminPage() {
         <AdminRestaurantPanel />
       ) : config.name === 'category-manager' ? (
         <AdminCategoryPanel />
+      ) : config.name === 'restaurant-change-requests' ? (
+        <AdminChangeRequestsPanel />
       ) : config.name === 'driver-applications' ? (
         <AdminDriverApplicationsPanel />
+      ) : config.name === 'driver-performance' ? (
+        <AdminDriverPerformancePanel />
+      ) : config.name === 'vouchers' ? (
+        <AdminVouchersPanel />
+      ) : config.name === 'settings' ? (
+        <AdminSettingsPanel />
       ) : (
         <AdminResourcePanel key={config.name} config={config} />
       )}
