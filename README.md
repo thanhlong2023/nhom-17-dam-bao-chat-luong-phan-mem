@@ -13,6 +13,52 @@ Hệ thống xoay quanh 4 đối tượng người dùng chính:
 
 ## 2. Chức năng chi tiết của từng đối tượng
 
+### Biểu đồ Use Case (Tổng quan)
+```mermaid
+flowchart LR
+    %% Actors
+    Customer((Khách hàng))
+    Driver((Tài xế))
+    Merchant((Nhà hàng))
+    Admin((Quản trị viên))
+
+    %% Use cases
+    UC1(Tìm kiếm đồ ăn)
+    UC2(Đặt hàng & Thanh toán)
+    UC3(Theo dõi đơn hàng)
+    UC4(Đánh giá)
+    
+    UC5(Nhận cuốc xe)
+    UC6(Cập nhật vị trí GPS)
+    UC7(Giao hàng)
+    
+    UC8(Quản lý Menu & Cửa hàng)
+    UC9(Tiếp nhận đơn hàng)
+    UC10(Theo dõi doanh thu)
+    
+    UC11(Quản lý người dùng)
+    UC12(Quản lý hệ thống & Vouchers)
+    UC13(Hỗ trợ vận hành)
+
+    Customer --> UC1
+    Customer --> UC2
+    Customer --> UC3
+    Customer --> UC4
+
+    Driver --> UC5
+    Driver --> UC6
+    Driver --> UC7
+    Driver --> UC3
+
+    Merchant --> UC8
+    Merchant --> UC9
+    Merchant --> UC10
+
+    Admin --> UC11
+    Admin --> UC12
+    Admin --> UC13
+```
+
 ### 2.1. Khách hàng (Customer)
 - **Tìm kiếm & Khám phá:** Tìm kiếm nhà hàng, danh mục món ăn (có hỗ trợ bộ lọc và gợi ý vị trí).
 - **Đặt hàng (Checkout):** Thêm món vào giỏ hàng, tính toán phí ship, áp dụng voucher (nếu có) và tiến hành đặt hàng.
@@ -45,6 +91,65 @@ Hệ thống xoay quanh 4 đối tượng người dùng chính:
 
 Cơ sở dữ liệu (MySQL) được thiết kế xoay quanh kiến trúc monolith đáp ứng các quy trình nghiệp vụ trên, bao gồm các bảng (tables) chính sau:
 
+### Lược đồ Thực thể Liên kết (ERD)
+```mermaid
+erDiagram
+    USERS {
+        int id PK
+        string name
+        string email
+        string phone
+        string password
+    }
+    ROLES {
+        int id PK
+        string role_name
+    }
+    USER_ROLES {
+        int user_id FK
+        int role_id FK
+    }
+    RESTAURANTS {
+        int id PK
+        int merchant_id FK
+        string name
+        string address
+        string status
+    }
+    FOOD_ITEMS {
+        int id PK
+        int restaurant_id FK
+        int category_id FK
+        string name
+        float price
+        int stock
+    }
+    ORDERS {
+        int id PK
+        int customer_id FK
+        int driver_id FK
+        int restaurant_id FK
+        float total_amount
+        string status
+    }
+    ORDER_ITEMS {
+        int id PK
+        int order_id FK
+        int food_item_id FK
+        int quantity
+        float price
+    }
+
+    USERS ||--o{ USER_ROLES : has
+    ROLES ||--o{ USER_ROLES : assigned_to
+    USERS ||--o| RESTAURANTS : "manages (Merchant)"
+    RESTAURANTS ||--o{ FOOD_ITEMS : offers
+    USERS ||--o{ ORDERS : "places (Customer) / delivers (Driver)"
+    RESTAURANTS ||--o{ ORDERS : receives
+    ORDERS ||--o{ ORDER_ITEMS : contains
+    FOOD_ITEMS ||--o{ ORDER_ITEMS : includes
+```
+
 ### 3.1. Phân hệ Tài khoản và Người dùng
 - `users`: Thông tin tài khoản đăng nhập và profile chung.
 - `roles`: Bảng danh mục các vai trò (Customer, Driver, Merchant, Admin).
@@ -73,3 +178,45 @@ Cơ sở dữ liệu (MySQL) được thiết kế xoay quanh kiến trúc monol
 - `payment_transactions`: Lưu lịch sử chi tiết các giao dịch thanh toán.
 
 Thiết kế DB này áp dụng tốt các cơ chế Transaction và Locking để đảm bảo không bị Race Condition (đặc biệt tại luồng đặt đơn và cập nhật số lượng món ăn).
+
+---
+
+## 4. Biểu đồ Tuần tự (Sequence Diagram) - Luồng Đặt Hàng & Giao Hàng
+
+Dưới đây là biểu đồ tuần tự mô tả luồng chính từ khi Khách hàng đặt đơn, Nhà hàng tiếp nhận cho đến khi Tài xế nhận cuốc và giao hàng hoàn tất:
+
+```mermaid
+sequenceDiagram
+    actor C as Khách hàng
+    participant S as Hệ thống (App/Server)
+    participant M as Nhà hàng
+    actor D as Tài xế
+
+    C->>S: Tìm kiếm & Thêm món vào giỏ
+    C->>S: Đặt hàng & Thanh toán (Checkout)
+    S-->>C: Chờ xác nhận
+    S->>M: Gửi thông báo đơn hàng mới
+    M->>S: Xác nhận nhận đơn & Chuẩn bị
+    S-->>C: Thông báo "Nhà hàng đang chuẩn bị"
+    
+    S->>D: Tìm tài xế lân cận (Geohash)
+    D->>S: Chấp nhận cuốc xe
+    S-->>C: Thông báo "Tài xế đang tới quán"
+    S-->>M: Cung cấp thông tin tài xế
+    
+    D->>M: Tới quán lấy đồ ăn
+    M-->>D: Giao đồ ăn cho tài xế
+    D->>S: Cập nhật trạng thái "Đang giao"
+    S-->>C: Thông báo "Tài xế đang giao hàng"
+    
+    loop Theo dõi thời gian thực (Real-time)
+        D->>S: Gửi tọa độ GPS liên tục
+        S-->>C: Hiển thị vị trí thực của tài xế trên bản đồ
+    end
+
+    D->>C: Tới nơi và giao đồ ăn
+    C->>D: Nhận hàng
+    D->>S: Cập nhật "Hoàn tất đơn hàng"
+    S-->>C: Thông báo "Giao hàng thành công"
+    C->>S: Đánh giá (Review) món ăn và tài xế
+```
