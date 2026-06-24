@@ -8,8 +8,9 @@ import { buildCreateOrderPayloadFromDraft, clearCheckoutDraft, getCheckoutDraft,
 import { formatCurrency } from '../utils/formatters'
 import { setLastOrderId } from '../utils/orderStorage'
 import { ErrorModal } from '../components/ErrorModal'
+import { createPayment } from '../services/api/payments'
 
-type PaymentMethod = 'CASH' | 'QR'
+type PaymentMethod = 'CASH' | 'QR' | 'E_WALLET'
 
 function shippingTypeLabel(type: CheckoutDraft['shippingType']) {
   if (type === 'FAST') return 'Giao nhanh'
@@ -48,6 +49,20 @@ export default function PaymentPage() {
       setLastOrderId(order.id)
       clearCheckoutDraft()
       notifyCartCleared()
+
+      if (method === 'E_WALLET') {
+        // Tạo phiên thanh toán với backend
+        const paymentData = await createPayment({
+          orderId: order.id,
+          idempotencyKey: order.idempotencyKey || draft.idempotencyKey || '',
+          paymentMethod: 'E_WALLET'
+        })
+        
+        // Chuyển hướng sang Mock Gateway ZaloPay
+        window.location.href = `/mock-gateway/${paymentData.id}?orderId=${order.id}`
+        return
+      }
+
       navigate(`/tracking?orderId=${order.id}`)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Không thể tạo đơn hàng')
@@ -195,6 +210,13 @@ export default function PaymentPage() {
                   <span>
                     <strong>Thanh toán bằng mã QR</strong>
                     <small>Chuyển sang bước QR mock.</small>
+                  </span>
+                  <i aria-hidden="true" />
+                </button>
+                <button type="button" className={method === 'E_WALLET' ? 'payment-method is-selected' : 'payment-method'} onClick={() => setMethod('E_WALLET')}>
+                  <span>
+                    <strong>Ví điện tử ZaloPay</strong>
+                    <small>Chuyển sang cổng thanh toán ZaloPay (Mock).</small>
                   </span>
                   <i aria-hidden="true" />
                 </button>
