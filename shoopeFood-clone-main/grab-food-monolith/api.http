@@ -1,0 +1,1028 @@
+# GrabFood Monolith API collection for VS Code REST Client
+# Run the login requests first. Token variables below are taken from their responses.
+
+@baseUrl = http://localhost:3000
+
+# Current auto seed accounts when DB is empty. Password is "123".
+@customerPhone = 0901234567
+@customerPassword = 123
+@merchantPhone = 0911111111
+@merchantPassword = 123
+@driverPhone = 0981111111
+@driverPassword = 123
+# Current seedService assigns ADMIN to the user with phone 0905678901.
+@adminPhone = 0905678901
+@adminPassword = 123
+
+# Legacy seed_all.sql / old audit script accounts use password "123456":
+# CUSTOMER 0900000001, DRIVER 0900000002, MERCHANT 0900000003, ADMIN 0900000005.
+
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@merchantToken = {{loginMerchant.response.body.$.data.token}}
+@customerToken = {{loginCustomer.response.body.$.data.token}}
+@driverToken = {{loginDriver.response.body.$.data.token}}
+
+@userId = 1
+@customerId = 1
+@merchantOwnerId = 6
+@driverId = 9
+@restaurantId = 1
+@categoryId = 1
+@foodId = 1
+@toppingId = 1
+@orderId = 1
+@paymentId = 1
+@voucherId = 1
+@settingId = 1
+@addressId = 1
+@driverPenaltyId = 1
+@restaurantChangeRequestId = 1
+@placeId = manual-demo-place
+
+# Order status codes:
+# PENDING, CONFIRMED, DRIVER_ACCEPTED, DRIVER_REJECTED, PICKING_UP, DELIVERING, COMPLETED, CANCELLED, TIMEOUT
+
+### Health - Categories public
+GET {{baseUrl}}/api/categories
+Accept: application/json
+
+### Auth - Login admin
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "{{adminPhone}}",
+  "password": "{{adminPassword}}",
+  "role": "ADMIN"
+}
+
+### Auth - Login merchant
+# @name loginMerchant
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "{{merchantPhone}}",
+  "password": "{{merchantPassword}}",
+  "role": "MERCHANT"
+}
+
+### Auth - Login customer
+# @name loginCustomer
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "{{customerPhone}}",
+  "password": "{{customerPassword}}",
+  "role": "CUSTOMER"
+}
+
+### Auth - Login driver
+# @name loginDriver
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "{{driverPhone}}",
+  "password": "{{driverPassword}}",
+  "role": "DRIVER"
+}
+
+### Auth - Register customer
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "REST Client Customer",
+  "phone": "03{{$randomInt 10000000 99999999}}",
+  "password": "Demo123"
+}
+
+### Auth - Me
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Auth - Update profile
+PUT {{baseUrl}}/api/auth/profile
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "fullName": "REST Client Customer",
+  "phone": "{{customerPhone}}"
+}
+
+### Auth - Change password
+# This changes the password for the logged-in account.
+PUT {{baseUrl}}/api/auth/password
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "{{customerPassword}}",
+  "newPassword": "Customer123"
+}
+
+### Auth - Activate role
+POST {{baseUrl}}/api/auth/activate-role
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "role": "CUSTOMER"
+}
+
+### Auth - Forgot password
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "phone": "{{customerPhone}}"
+}
+
+### Auth - Reset password
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "phone": "{{customerPhone}}",
+  "otp": "123456",
+  "newPassword": "Customer123"
+}
+
+### Users - Current profile
+GET {{baseUrl}}/api/users/me
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Users - List merchants
+GET {{baseUrl}}/api/users/merchants
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Users - Create merchant
+POST {{baseUrl}}/api/users/merchants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fullName": "REST Merchant",
+  "phone": "07{{$randomInt 10000000 99999999}}",
+  "password": "Merchant123",
+  "ratingAvg": 5
+}
+
+### Users - List users
+GET {{baseUrl}}/api/users
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Users - Get user by id
+GET {{baseUrl}}/api/users/{{userId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Users - Create user
+POST {{baseUrl}}/api/users
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fullName": "REST Created User",
+  "phone": "08{{$randomInt 10000000 99999999}}",
+  "password": "User123",
+  "ratingAvg": 5,
+  "role": "CUSTOMER"
+}
+
+### Users - Update user
+PUT {{baseUrl}}/api/users/{{userId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fullName": "REST Updated User",
+  "phone": "{{customerPhone}}",
+  "ratingAvg": 4.9,
+  "role": "CUSTOMER"
+}
+
+### Users - Delete user
+DELETE {{baseUrl}}/api/users/{{userId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Applications - My status
+GET {{baseUrl}}/api/applications/my-status
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Applications - Apply driver
+POST {{baseUrl}}/api/applications/driver
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "licensePlate": "59A1-{{$randomInt 10000 99999}}",
+  "idCardNumber": "079{{$randomInt 100000000 999999999}}",
+  "vehicleType": "Motorbike"
+}
+
+### Applications - Apply merchant
+POST {{baseUrl}}/api/applications/merchant
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "name": "REST Pending Restaurant",
+  "address": "123 Nguyen Trai, District 5, Ho Chi Minh City",
+  "latitude": 10.7554,
+  "longitude": 106.6669,
+  "openingTime": "07:00:00",
+  "closingTime": "22:00:00",
+  "imageUrl": "https://example.com/restaurant.jpg"
+}
+
+### Applications - Pending drivers
+GET {{baseUrl}}/api/applications/drivers/pending
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Applications - Approve driver
+PATCH {{baseUrl}}/api/applications/drivers/{{driverId}}/approve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{}
+
+### Applications - Reject driver
+PATCH {{baseUrl}}/api/applications/drivers/{{driverId}}/reject
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reason": "Missing required verification"
+}
+
+### Restaurants - List public approved
+GET {{baseUrl}}/api/restaurants
+Accept: application/json
+
+### Restaurants - List including pending as admin
+GET {{baseUrl}}/api/restaurants?includePending=true
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Restaurants - My restaurants
+GET {{baseUrl}}/api/restaurants/mine
+Authorization: Bearer {{merchantToken}}
+Accept: application/json
+
+### Restaurants - Create restaurant
+POST {{baseUrl}}/api/restaurants
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "ownerId": {{merchantOwnerId}},
+  "name": "REST Pho House",
+  "address": "413 Nguyen Trai, District 5, Ho Chi Minh City",
+  "latitude": 10.7554,
+  "longitude": 106.6669,
+  "openingTime": "07:00:00",
+  "closingTime": "22:00:00",
+  "isOpen": true,
+  "imageUrl": "https://example.com/pho.jpg",
+  "ratingAvg": 5
+}
+
+### Restaurants - Update open status
+PATCH {{baseUrl}}/api/restaurants/{{restaurantId}}/status
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "isOpen": true
+}
+
+### Restaurants - Update today status
+PATCH {{baseUrl}}/api/restaurants/{{restaurantId}}/today-status
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "isOpenToday": true,
+  "reason": null,
+  "temporaryClosedUntil": null
+}
+
+### Restaurants - Update location
+PATCH {{baseUrl}}/api/restaurants/{{restaurantId}}/location
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "latitude": 10.7554,
+  "longitude": 106.6669
+}
+
+### Restaurants - Pending restaurants
+GET {{baseUrl}}/api/restaurants/admin/pending
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Restaurants - Approve pending restaurant
+PATCH {{baseUrl}}/api/restaurants/admin/{{restaurantId}}/approve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "approvedBy": {{merchantOwnerId}}
+}
+
+### Restaurants - Reject pending restaurant
+PATCH {{baseUrl}}/api/restaurants/admin/{{restaurantId}}/reject
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reason": "Information needs correction"
+}
+
+### Restaurants - List change requests
+GET {{baseUrl}}/api/restaurants/admin/change-requests?status=PENDING
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Restaurants - Approve change request
+PATCH {{baseUrl}}/api/restaurants/admin/change-requests/{{restaurantChangeRequestId}}/approve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reviewedBy": {{merchantOwnerId}}
+}
+
+### Restaurants - Reject change request
+PATCH {{baseUrl}}/api/restaurants/admin/change-requests/{{restaurantChangeRequestId}}/reject
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reason": "Rejected by REST Client test"
+}
+
+### Restaurants - Get by id
+GET {{baseUrl}}/api/restaurants/{{restaurantId}}
+Accept: application/json
+
+### Restaurants - Update restaurant
+PUT {{baseUrl}}/api/restaurants/{{restaurantId}}
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "openingTime": "07:00:00",
+  "closingTime": "22:00:00",
+  "isOpen": true,
+  "isOpenToday": true,
+  "imageUrl": "https://example.com/restaurant-updated.jpg"
+}
+
+### Restaurants - Delete restaurant
+DELETE {{baseUrl}}/api/restaurants/{{restaurantId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Categories - List all
+GET {{baseUrl}}/api/categories
+Accept: application/json
+
+### Categories - List by restaurant
+GET {{baseUrl}}/api/categories?restaurantId={{restaurantId}}
+Accept: application/json
+
+### Categories - Get by id
+GET {{baseUrl}}/api/categories/{{categoryId}}
+Accept: application/json
+
+### Categories - Create
+POST {{baseUrl}}/api/categories
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "restaurantId": {{restaurantId}},
+  "name": "REST Category {{$timestamp}}"
+}
+
+### Categories - Update
+PUT {{baseUrl}}/api/categories/{{categoryId}}
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "restaurantId": {{restaurantId}},
+  "name": "REST Updated Category"
+}
+
+### Categories - Delete
+DELETE {{baseUrl}}/api/categories/{{categoryId}}
+Authorization: Bearer {{merchantToken}}
+Accept: application/json
+
+### Foods - List all
+GET {{baseUrl}}/api/foods
+Accept: application/json
+
+### Foods - List by restaurant/category/name/availability
+GET {{baseUrl}}/api/foods?restaurantId={{restaurantId}}&categoryId={{categoryId}}&name=pho&isAvailable=true
+Accept: application/json
+
+### Foods - Get by id
+GET {{baseUrl}}/api/foods/{{foodId}}
+Accept: application/json
+
+### Foods - Create
+POST {{baseUrl}}/api/foods
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "categoryId": {{categoryId}},
+  "name": "REST Food {{$timestamp}}",
+  "price": 45000,
+  "imageUrl": "https://example.com/food.jpg",
+  "isAvailable": true,
+  "defaultQuantity": 50,
+  "currentQuantity": 50
+}
+
+### Foods - Update
+PUT {{baseUrl}}/api/foods/{{foodId}}
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "categoryId": {{categoryId}},
+  "name": "REST Updated Food",
+  "price": 49000,
+  "imageUrl": "https://example.com/food-updated.jpg",
+  "isAvailable": true,
+  "defaultQuantity": 60,
+  "currentQuantity": 60
+}
+
+### Foods - Delete
+DELETE {{baseUrl}}/api/foods/{{foodId}}
+Authorization: Bearer {{merchantToken}}
+Accept: application/json
+
+### Toppings - List by restaurant
+GET {{baseUrl}}/api/restaurants/{{restaurantId}}/toppings
+Accept: application/json
+
+### Toppings - Create for restaurant
+POST {{baseUrl}}/api/restaurants/{{restaurantId}}/toppings
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "name": "REST Topping {{$timestamp}}",
+  "price": 7000,
+  "isAvailable": true,
+  "defaultQuantity": 100,
+  "currentQuantity": 100,
+  "startDate": "2026-06-29",
+  "endDate": "2026-12-31"
+}
+
+### Toppings - Update
+PUT {{baseUrl}}/api/toppings/{{toppingId}}
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "name": "REST Updated Topping",
+  "price": 8000,
+  "isAvailable": true,
+  "defaultQuantity": 120,
+  "currentQuantity": 120,
+  "startDate": "2026-06-29",
+  "endDate": "2026-12-31"
+}
+
+### Toppings - Delete
+DELETE {{baseUrl}}/api/toppings/{{toppingId}}
+Authorization: Bearer {{merchantToken}}
+Accept: application/json
+
+### Toppings - List by food
+GET {{baseUrl}}/api/foods/{{foodId}}/toppings
+Accept: application/json
+
+### Toppings - Assign to food
+POST {{baseUrl}}/api/foods/{{foodId}}/toppings
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "toppingIds": [{{toppingId}}]
+}
+
+### Orders - Create secure order
+# @name createOrder
+POST {{baseUrl}}/api/orders/secure
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "restaurantId": {{restaurantId}},
+  "receiverAddress": "1 REST Client Street, Ho Chi Minh City",
+  "receiverLat": 10.7769,
+  "receiverLng": 106.7009,
+  "distanceKm": 2.5,
+  "baseFee": 20000,
+  "discountAmount": 0,
+  "taxAmount": 0,
+  "shippingType": "STANDARD",
+  "idempotencyKey": "order-{{$guid}}",
+  "items": [
+    {
+      "foodId": {{foodId}},
+      "quantity": 1
+    }
+  ]
+}
+
+### Orders - Create order
+POST {{baseUrl}}/api/orders
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "restaurantId": {{restaurantId}},
+  "receiverAddress": "2 REST Client Street, Ho Chi Minh City",
+  "receiverLat": 10.7769,
+  "receiverLng": 106.7009,
+  "distanceKm": 2,
+  "baseFee": 20000,
+  "shippingType": "STANDARD",
+  "idempotencyKey": "order-{{$guid}}",
+  "items": [
+    {
+      "foodId": {{foodId}},
+      "quantity": 1
+    }
+  ]
+}
+
+### Orders - List with filters
+GET {{baseUrl}}/api/orders?statusCode=PENDING&restaurantId={{restaurantId}}&customerId={{customerId}}&driverId={{driverId}}&fromDate=2026-01-01&toDate=2026-12-31
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Orders - HTML orders page
+GET {{baseUrl}}/api/orders/page
+Accept: text/html
+
+### Orders - Route
+GET {{baseUrl}}/api/orders/route?fromLat=10.7769&fromLng=106.7009&toLat=10.7554&toLng=106.6669
+Authorization: Bearer {{driverToken}}
+Accept: application/json
+
+### Orders - Tracking
+GET {{baseUrl}}/api/orders/{{orderId}}/tracking
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Orders - Get by id
+GET {{baseUrl}}/api/orders/{{orderId}}
+Accept: application/json
+
+### Orders - Driver accept order
+POST {{baseUrl}}/api/orders/{{orderId}}/accept
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{}
+
+### Orders - Driver reject offer
+POST {{baseUrl}}/api/orders/{{orderId}}/reject-offer
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "reason": "Too far"
+}
+
+### Orders - Driver cancel assigned order
+POST {{baseUrl}}/api/orders/{{orderId}}/driver-cancel
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "reasonCode": "VEHICLE_ISSUE"
+}
+
+### Orders - Customer cancel order
+POST {{baseUrl}}/api/orders/{{orderId}}/cancel
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "reason": "Customer changed plan"
+}
+
+### Orders - Merchant reject order
+PATCH {{baseUrl}}/api/orders/{{orderId}}/reject
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "reason": "Restaurant is overloaded"
+}
+
+### Orders - Update status as merchant
+PUT {{baseUrl}}/api/orders/{{orderId}}/status
+Authorization: Bearer {{merchantToken}}
+Content-Type: application/json
+
+{
+  "statusCode": "CONFIRMED"
+}
+
+### Orders - Update status as driver
+PUT {{baseUrl}}/api/orders/{{orderId}}/status
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "statusCode": "PICKING_UP"
+}
+
+### Orders - Admin update order fields
+PUT {{baseUrl}}/api/orders/{{orderId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "restaurantId": {{restaurantId}},
+  "receiverAddress": "Updated REST Client Address",
+  "receiverLat": 10.78,
+  "receiverLng": 106.7,
+  "distanceKm": 3,
+  "baseFee": 20000,
+  "discountAmount": 0,
+  "taxAmount": 0,
+  "shippingType": "STANDARD",
+  "statusCode": "CONFIRMED"
+}
+
+### Orders - Delete order
+DELETE {{baseUrl}}/api/orders/{{orderId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Drivers - My order feed
+GET {{baseUrl}}/api/drivers/me/orders
+Authorization: Bearer {{driverToken}}
+Accept: application/json
+
+### Drivers - My metrics
+GET {{baseUrl}}/api/drivers/me/metrics
+Authorization: Bearer {{driverToken}}
+Accept: application/json
+
+### Drivers - My route
+GET {{baseUrl}}/api/drivers/me/route?fromLat=10.7769&fromLng=106.7009&toLat=10.7554&toLng=106.6669
+Authorization: Bearer {{driverToken}}
+Accept: application/json
+
+### Drivers - My completed orders
+GET {{baseUrl}}/api/drivers/me/completed?page=1&limit=20
+Authorization: Bearer {{driverToken}}
+Accept: application/json
+
+### Drivers - List drivers
+GET {{baseUrl}}/api/drivers
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Drivers - Admin metrics
+GET {{baseUrl}}/api/drivers/admin/{{driverId}}/metrics
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Drivers - Revoke penalty
+POST {{baseUrl}}/api/drivers/admin/penalties/{{driverPenaltyId}}/revoke
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{}
+
+### Drivers - Info
+GET {{baseUrl}}/api/drivers/{{driverId}}/info
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Drivers - Public profile
+GET {{baseUrl}}/api/drivers/{{driverId}}/profile
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Drivers - Latest location
+GET {{baseUrl}}/api/drivers/{{driverId}}/location?orderId={{orderId}}
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Drivers - Get by id
+GET {{baseUrl}}/api/drivers/{{driverId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Drivers - Create driver
+POST {{baseUrl}}/api/drivers
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fullName": "REST Driver",
+  "phone": "06{{$randomInt 10000000 99999999}}",
+  "password": "Driver123",
+  "ratingAvg": 5,
+  "vehicleType": "Motorbike",
+  "licensePlate": "59A1-{{$randomInt 10000 99999}}",
+  "isOnline": true
+}
+
+### Drivers - Update location
+POST {{baseUrl}}/api/drivers/{{driverId}}/location
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "orderId": {{orderId}},
+  "latitude": 10.7769,
+  "longitude": 106.7009,
+  "heading": 90,
+  "speedKmh": 24
+}
+
+### Drivers - Update online status
+PUT {{baseUrl}}/api/drivers/{{driverId}}/online
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{
+  "isOnline": true
+}
+
+### Drivers - Set online
+PUT {{baseUrl}}/api/drivers/{{driverId}}/online/on
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{}
+
+### Drivers - Set offline
+PUT {{baseUrl}}/api/drivers/{{driverId}}/online/off
+Authorization: Bearer {{driverToken}}
+Content-Type: application/json
+
+{}
+
+### Drivers - Update driver
+PUT {{baseUrl}}/api/drivers/{{driverId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "fullName": "REST Updated Driver",
+  "phone": "{{driverPhone}}",
+  "ratingAvg": 4.9,
+  "vehicleType": "Motorbike",
+  "licensePlate": "59A1-00001",
+  "isOnline": true
+}
+
+### Drivers - Delete driver
+DELETE {{baseUrl}}/api/drivers/{{driverId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Payments - Create checkout
+# @name createPayment
+POST {{baseUrl}}/api/payments/create
+Content-Type: application/json
+
+{
+  "orderId": {{orderId}},
+  "idempotencyKey": "payment-{{$guid}}",
+  "paymentMethod": "E_WALLET"
+}
+
+### Payments - Callback
+POST {{baseUrl}}/api/payments/callback
+Content-Type: application/json
+
+{
+  "paymentId": {{paymentId}},
+  "gatewayRef": "MOCK-{{$timestamp}}"
+}
+
+### Payments - Status by order id
+GET {{baseUrl}}/api/payments/{{orderId}}
+Accept: application/json
+
+### Reviews - Restaurant summary
+GET {{baseUrl}}/api/reviews/restaurants/summary
+Accept: application/json
+
+### Reviews - Create/update review
+POST {{baseUrl}}/api/reviews
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "orderId": {{orderId}},
+  "targetType": "RESTAURANT",
+  "rating": 5,
+  "comment": "Great service from REST Client"
+}
+
+### Addresses - Suggest
+GET {{baseUrl}}/api/addresses/suggest?q=Nguyen%20Trai
+Accept: application/json
+
+### Addresses - Detail
+GET {{baseUrl}}/api/addresses/detail/{{placeId}}?description=123%20Nguyen%20Trai&latitude=10.7554&longitude=106.6669&provider=manual
+Accept: application/json
+
+### Addresses - Reverse
+GET {{baseUrl}}/api/addresses/reverse?lat=10.7554&lng=106.6669
+Accept: application/json
+
+### Addresses - My saved addresses
+GET {{baseUrl}}/api/addresses/mine
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Addresses - Create saved address
+POST {{baseUrl}}/api/addresses/mine
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "label": "Home",
+  "placeId": "manual-home",
+  "formattedAddress": "123 Nguyen Trai, District 5, Ho Chi Minh City",
+  "latitude": 10.7554,
+  "longitude": 106.6669,
+  "province": "Ho Chi Minh City",
+  "district": "District 5",
+  "ward": "Ward 7",
+  "street": "Nguyen Trai",
+  "houseNumber": "123",
+  "note": "REST Client saved address",
+  "provider": "manual"
+}
+
+### Addresses - Update saved address
+PUT {{baseUrl}}/api/addresses/mine/{{addressId}}
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "label": "Office",
+  "placeId": "manual-office",
+  "formattedAddress": "456 Le Loi, District 1, Ho Chi Minh City",
+  "latitude": 10.7769,
+  "longitude": 106.7009,
+  "province": "Ho Chi Minh City",
+  "district": "District 1",
+  "ward": "Ben Nghe",
+  "street": "Le Loi",
+  "houseNumber": "456",
+  "note": "Updated from REST Client",
+  "provider": "manual"
+}
+
+### Addresses - Delete saved address
+DELETE {{baseUrl}}/api/addresses/mine/{{addressId}}
+Authorization: Bearer {{customerToken}}
+Accept: application/json
+
+### Admin vouchers - List
+GET {{baseUrl}}/api/admin/vouchers
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Admin vouchers - Get by id
+GET {{baseUrl}}/api/admin/vouchers/{{voucherId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Admin vouchers - Create
+POST {{baseUrl}}/api/admin/vouchers
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "code": "REST{{$randomInt 1000 9999}}",
+  "discountType": "PERCENTAGE",
+  "discountValue": 10,
+  "minOrderValue": 50000,
+  "maxDiscountAmount": 25000,
+  "validFrom": "2026-06-29T00:00:00.000Z",
+  "validUntil": "2026-12-31T23:59:59.000Z",
+  "usageLimit": 100,
+  "isActive": true
+}
+
+### Admin vouchers - Update
+PUT {{baseUrl}}/api/admin/vouchers/{{voucherId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "code": "RESTUPDATED",
+  "discountType": "FIXED",
+  "discountValue": 15000,
+  "minOrderValue": 50000,
+  "maxDiscountAmount": null,
+  "validFrom": "2026-06-29T00:00:00.000Z",
+  "validUntil": "2026-12-31T23:59:59.000Z",
+  "usageLimit": 50,
+  "isActive": true
+}
+
+### Admin vouchers - Delete
+DELETE {{baseUrl}}/api/admin/vouchers/{{voucherId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Admin settings - List
+GET {{baseUrl}}/api/admin/settings
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Admin settings - Create
+POST {{baseUrl}}/api/admin/settings
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "key": "rest_client_setting_{{$timestamp}}",
+  "value": "enabled",
+  "description": "Created from REST Client"
+}
+
+### Admin settings - Update
+PUT {{baseUrl}}/api/admin/settings/{{settingId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "key": "rest_client_setting_updated",
+  "value": "disabled",
+  "description": "Updated from REST Client"
+}
+
+### Admin settings - Delete
+DELETE {{baseUrl}}/api/admin/settings/{{settingId}}
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+### Vouchers - Validate
+POST {{baseUrl}}/api/vouchers/validate
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+
+{
+  "code": "RESTUPDATED",
+  "subtotal": 120000
+}
+
+### Web page - Home
+GET {{baseUrl}}/
+Accept: text/html
+
+### Web page - Map
+GET {{baseUrl}}/map
+Accept: text/html
+
+### Web page - Foods CRUD
+GET {{baseUrl}}/foods-crud
+Accept: text/html
+
+### Web page - Categories CRUD
+GET {{baseUrl}}/categories-crud
+Accept: text/html
+
+### Web page - Orders dashboard
+GET {{baseUrl}}/orders-dashboard
+Accept: text/html
